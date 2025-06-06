@@ -280,7 +280,7 @@ param useAiProject bool = false
 
 var abbrs = loadJsonContent('abbreviations.json')
 var resourceToken = toLower(uniqueString(subscription().id, environmentName, location))
-var tags = { 'azd-env-name': environmentName }
+var tags = { 'azd-env-name' : environmentName, 'costcenter' : '141011' , 'owner' : 'OsloRebecca' }
 
 var tenantIdForAuth = !empty(authTenantId) ? authTenantId : tenantId
 var authenticationIssuerUri = '${environment().authentication.loginEndpoint}${tenantIdForAuth}/v2.0'
