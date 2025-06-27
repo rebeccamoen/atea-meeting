@@ -1,7 +1,7 @@
 .answerContainer {
     padding: 1.25em;
     background: rgb(249, 249, 249);
-    border-radius: 0.5em;
+    border-radius: 0.7em;
     box-shadow:
         0em 0.125em 0.25em rgba(0, 0, 0, 0.14),
         0em 0em 0.125em rgba(0, 0, 0, 0.12);
@@ -38,7 +38,7 @@ h2 {
 }
 
 .selected {
-    outline: 0.125em solid rgba(115, 118, 225, 1);
+    outline: 0.125em solid #008A00;
 }
 
 .citationLearnMore {
@@ -53,8 +53,8 @@ h2 {
     text-align: center;
     border-radius: 0.25em;
     padding: 0em 0.5em;
-    background: #d1dbfa;
-    color: #123bb6;
+    background: #EDEEEE;
+    color: #008A00;
     text-decoration: none;
     cursor: pointer;
 }
@@ -79,8 +79,8 @@ h2 {
     text-align: center;
     border-radius: 0.25em;
     padding: 0em 0.5em;
-    background: #e8ebfa;
-    color: black;
+    background: #EDEEEE;
+    color: #008A00;
     font-style: italic;
     text-decoration: none;
     cursor: pointer;
@@ -108,8 +108,8 @@ sup {
     min-width: 0.875em;
     height: 0.875em;
     border-radius: 0.1875em;
-    background: #d1dbfa;
-    color: #123bb6;
+    background: #EDEEEE;
+    color: #008A00;
     text-decoration-color: transparent;
     outline: transparent solid 0.0625em;
     cursor: pointer;

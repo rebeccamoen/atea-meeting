@@ -56,7 +56,7 @@
 }
 
 .tProp {
-    background-color: #d7d7d7;
+    background-color: #ffffff;
     color: #333232;
     font-size: 0.75em;
     padding: 0.1875em 0.625em;
@@ -105,7 +105,7 @@
     display: flex;
     flex-wrap: wrap;
     align-items: center;
-    background-color: #d7d7d7;
+    background-color: #ffffff;
     white-space: nowrap;
     overflow: visible;
     min-width: max-content;
