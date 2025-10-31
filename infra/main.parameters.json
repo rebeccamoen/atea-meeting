@@ -102,7 +102,7 @@
       "value": "${AZURE_APP_SERVICE_PLAN}"
     },
     "appServiceSkuName": {
-      "value": "${AZURE_APP_SERVICE_SKU=B1}"
+      "value": "${AZURE_APP_SERVICE_SKU=S1}"
     },
     "backendServiceName": {
       "value": "${AZURE_APP_SERVICE}"

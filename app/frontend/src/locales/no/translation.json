@@ -37,9 +37,9 @@
     "chatEmptyStateTitle": "Chat with your data",
     "chatEmptyStateSubtitle": "Ask anything or try an example",
     "defaultExamples": {
-        "1": "Hvor finner jeg mikrofonene i TP2B rommet?",
-        "2": "Hvordan kobler jeg Room Navigator til et Cisco Endpoint?",
-        "3": "Kan kamera følge foreleser?",
+        "1": "Lyden kutter ut midt i møtet, hvordan feilsøker jeg det?",
+        "2": "Hvordan synkroniserer jeg sender og mottaker?",
+        "3": "Hvor finner jeg webex møte ID?",
         "placeholder": "Skriv et nytt spørsmål"
     },
     "askTitle": "Ask your data",
