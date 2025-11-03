@@ -36,12 +36,14 @@ from openai.types.chat import (
 from approaches.promptmanager import PromptManager
 from core.authentication import AuthenticationHelper
 
+from datetime import datetime
 
 @dataclass
 class Document:
     id: Optional[str] = None
     content: Optional[str] = None
-    category: Optional[str] = None
+    category: Optional[list[str]] = None
+    docdate: Optional[str] = None
     sourcepage: Optional[str] = None
     sourcefile: Optional[str] = None
     oids: Optional[list[str]] = None
@@ -56,6 +58,7 @@ class Document:
             "id": self.id,
             "content": self.content,
             "category": self.category,
+            "docdate": self.docdate,
             "sourcepage": self.sourcepage,
             "sourcefile": self.sourcefile,
             "oids": self.oids,
@@ -127,13 +130,19 @@ class TokenUsageProps:
 @dataclass
 class GPTReasoningModelSupport:
     streaming: bool
+    minimal_effort: bool
 
 
 class Approach(ABC):
     # List of GPT reasoning models support
     GPT_REASONING_MODELS = {
-        "o1": GPTReasoningModelSupport(streaming=False),
-        "o3-mini": GPTReasoningModelSupport(streaming=True),
+        "o1": GPTReasoningModelSupport(streaming=False, minimal_effort=False),
+        "o3": GPTReasoningModelSupport(streaming=True, minimal_effort=False),
+        "o3-mini": GPTReasoningModelSupport(streaming=True, minimal_effort=False),
+        "o4-mini": GPTReasoningModelSupport(streaming=True, minimal_effort=False),
+        "gpt-5": GPTReasoningModelSupport(streaming=True, minimal_effort=True),
+        "gpt-5-nano": GPTReasoningModelSupport(streaming=True, minimal_effort=True),
+        "gpt-5-mini": GPTReasoningModelSupport(streaming=True, minimal_effort=True),
     }
     # Set a higher token limit for GPT reasoning models
     RESPONSE_DEFAULT_TOKEN_LIMIT = 1024
@@ -178,9 +187,9 @@ class Approach(ABC):
         security_filter = self.auth_helper.build_security_filters(overrides, auth_claims)
         filters = []
         if include_category:
-            filters.append("category eq '{}'".format(include_category.replace("'", "''")))
+            filters.append("category/any(c: c eq '{}')".format(include_category.replace("'", "''")))
         if exclude_category:
-            filters.append("category ne '{}'".format(exclude_category.replace("'", "''")))
+            filters.append("not category/any(c: c eq '{}')".format(exclude_category.replace("'", "''")))
         if security_filter:
             filters.append(security_filter)
         return None if len(filters) == 0 else " and ".join(filters)
@@ -206,6 +215,7 @@ class Approach(ABC):
                 search_text=search_text,
                 filter=filter,
                 top=top,
+                #scoring_profile="boosting", # Applies scoring profile to search query
                 query_caption="extractive|highlight-false" if use_semantic_captions else None,
                 query_rewrites="generative" if use_query_rewriting else None,
                 vector_queries=search_vectors,
@@ -231,6 +241,7 @@ class Approach(ABC):
                         id=document.get("id"),
                         content=document.get("content"),
                         category=document.get("category"),
+                        docdate=document.get("docdate"),
                         sourcepage=document.get("sourcepage"),
                         sourcefile=document.get("sourcefile"),
                         oids=document.get("oids"),
@@ -406,6 +417,16 @@ class Approach(ABC):
             return self.RESPONSE_REASONING_DEFAULT_TOKEN_LIMIT
 
         return default_limit
+
+    def get_lowest_reasoning_effort(self, model: str) -> ChatCompletionReasoningEffort:
+        """
+        Return the lowest valid reasoning_effort for the given model.
+        """
+        if model not in self.GPT_REASONING_MODELS:
+            return None
+        if self.GPT_REASONING_MODELS[model].minimal_effort:
+            return "minimal"
+        return "low"
 
     def create_chat_completion(
         self,

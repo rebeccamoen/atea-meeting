@@ -1,7 +1,18 @@
-.container {
+.responsiveButton {
     display: flex;
     align-items: center;
     gap: 0.375em;
     cursor: pointer;
     padding: 0.5rem;
+}
+
+.buttonText {
+    display: inline;
+}
+
+/* Responsive styling */
+@media (max-width: 992px) {
+    .buttonText {
+        display: none;
+    }
 }

@@ -1,7 +1,7 @@
 import asyncio
 import logging
 import os
-from typing import Optional
+from typing import List, Optional
 
 from azure.search.documents.indexes.models import (
     AzureOpenAIVectorizer,
@@ -29,6 +29,11 @@ from azure.search.documents.indexes.models import (
     VectorSearchCompressionRescoreStorageMethod,
     VectorSearchProfile,
     VectorSearchVectorizer,
+    ScoringProfile,
+    FreshnessScoringFunction,
+    FreshnessScoringParameters,
+    ScoringFunctionInterpolation,
+    ScoringFunction
 )
 
 from .blobmanager import BlobManager
@@ -45,10 +50,11 @@ class Section:
     A section of a page that is stored in a search service. These sections are used as context by Azure OpenAI service
     """
 
-    def __init__(self, split_page: SplitPage, content: File, category: Optional[str] = None):
+    def __init__(self, split_page: SplitPage, content: File, category: Optional[List[str]] = None, docdate: Optional[str] = None):
         self.split_page = split_page
         self.content = content
         self.category = category
+        self.docdate = docdate
 
 
 class SearchManager:
@@ -188,12 +194,31 @@ class SearchManager:
                         type="Edm.String",
                         analyzer_name=self.search_analyzer_name,
                     ),
-                    SimpleField(name="category", type="Edm.String", filterable=True, facetable=True),
+                    SimpleField(
+                        name = "category",
+                        type = "Collection(Edm.String)",
+                        searchable = False,
+                        filterable = True,
+                        retrievable = True,
+                        stored = True,
+                        sortable = False,
+                        facetable = True,
+                        key = False,
+                        synonymMaps = []
+                    ),
                     SimpleField(
                         name="sourcepage",
                         type="Edm.String",
                         filterable=True,
                         facetable=True,
+                    ),
+                    SimpleField(
+                        name="docdate",
+                        type="Edm.DateTimeOffset",
+                        filterable=True,    # Allows filtering by date
+                        sortable=True,      # Enables sorting results by date
+                        searchable=False,   # Not needed for full-text search
+                        facetable=False,    # Facets are not required for exact dates
                     ),
                     SimpleField(
                         name="sourcefile",
@@ -208,15 +233,14 @@ class SearchManager:
                         facetable=False,
                     ),
                 ]
-                if self.use_acls:
-                    fields.append(
+                fields.append(
                         SimpleField(
                             name="oids",
                             type=SearchFieldDataType.Collection(SearchFieldDataType.String),
                             filterable=True,
                         )
                     )
-                    fields.append(
+                fields.append(
                         SimpleField(
                             name="groups",
                             type=SearchFieldDataType.Collection(SearchFieldDataType.String),
@@ -255,9 +279,26 @@ class SearchManager:
                     vector_search_profiles.append(image_vector_search_profile)
                     vector_algorithms.append(image_vector_algorithm)
 
+                #scoring_profiles = [
+                #    ScoringProfile(
+                #        name="boosting",
+                #        functions=[
+                #            FreshnessScoringFunction(
+                #                field_name="docdate",
+                #                boost=10,
+                #                interpolation=ScoringFunctionInterpolation.QUADRATIC,
+                #                parameters=FreshnessScoringParameters(
+                #                    boosting_duration="P30D"
+                #                )
+                #            )
+                #        ]   
+                #    )
+                #]
+
                 index = SearchIndex(
                     name=self.search_info.index_name,
                     fields=fields,
+                    #scoring_profiles=scoring_profiles,  # Add scoring profiles here
                     semantic_search=SemanticSearch(
                         default_configuration_name="default",
                         configurations=[
@@ -270,6 +311,7 @@ class SearchManager:
                             )
                         ],
                     ),
+
                     vector_search=VectorSearch(
                         profiles=vector_search_profiles,
                         algorithms=vector_algorithms,
@@ -421,8 +463,9 @@ class SearchManager:
                 documents = [
                     {
                         "id": f"{section.content.filename_to_id()}-page-{section_index + batch_index * MAX_BATCH_SIZE}",
-                        "content": section.split_page.text,
+                        "content": f"Document title: {section.content.filename()}\n Document content: {section.split_page.text}",
                         "category": section.category,
+                        "docdate": section.docdate,
                         "sourcepage": (
                             BlobManager.blob_image_name_from_file_page(
                                 filename=section.content.filename(),
@@ -446,7 +489,7 @@ class SearchManager:
                     if self.field_name_embedding is None:
                         raise ValueError("Embedding field name must be set")
                     embeddings = await self.embeddings.create_embeddings(
-                        texts=[section.split_page.text for section in batch]
+                        texts=[f"Document title: {section.content.filename()}\n Document content: {section.split_page.text}" for section in batch]
                     )
                     for i, document in enumerate(documents):
                         document[self.field_name_embedding] = embeddings[i]

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, RefObject } from "react";
+import React, { useState, useEffect, useRef, RefObject, createContext, useContext } from "react";
 import { Outlet, NavLink, Link } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import styles from "./Layout.module.css";
@@ -8,9 +8,36 @@ import { useLogin } from "../../authConfig";
 import { LoginButton } from "../../components/LoginButton";
 import { IconButton } from "@fluentui/react";
 
+import { HelpContent } from "../../components/HelpContent";
+import { FeedbackForm } from "../../components/FeedbackForm";
+
+// add "export" in front of the types
+export type HeaderAction = {
+  key: string;
+  label: string;
+  onClick: () => void;
+  disabled?: boolean;
+};
+
+export type HeaderMenuContextType = {
+  actions: HeaderAction[];
+  setActions: React.Dispatch<React.SetStateAction<HeaderAction[]>>;
+};
+
+const HeaderMenuContext = createContext<HeaderMenuContextType | null>(null);
+export const useHeaderMenu = () => {
+    const ctx = useContext(HeaderMenuContext);
+    if (!ctx) throw new Error("useHeaderMenu must be used within HeaderMenuProvider");
+    return ctx;
+};
+
 const Layout = () => {
     const { t } = useTranslation();
     const [menuOpen, setMenuOpen] = useState(false);
+    const [isHelpOpen, setIsHelpOpen] = useState(false);
+    const [isFeedbackOpen, setIsFeedbackOpen] = useState(false);
+    const [actions, setActions] = useState<HeaderAction[]>([]);
+
     const menuRef: RefObject<HTMLDivElement> = useRef(null);
 
     const toggleMenu = () => {
@@ -35,31 +62,41 @@ const Layout = () => {
     }, [menuOpen]);
 
     return (
-        <div className={styles.layout}>
-            <header className={styles.header} role={"banner"}>
-                <div className={styles.headerContainer} ref={menuRef}>
-                    <Link to="/" className={styles.headerTitleContainer}>
-                        <h3 className={styles.headerTitle}>{t("headerTitle")}</h3>
-                    </Link>
-                    <nav>
-                        <ul className={`${styles.headerNavList} ${menuOpen ? styles.show : ""}`}>
-                            
-                        </ul>
-                    </nav>
-                    <div className={styles.loginMenuContainer}>
-                        {useLogin && <LoginButton />}
-                        <IconButton
-                            iconProps={{ iconName: "GlobalNavButton" }}
-                            className={styles.menuToggle}
-                            onClick={toggleMenu}
-                            ariaLabel={t("labels.toggleMenu")}
-                        />
+        <HeaderMenuContext.Provider value={{ actions, setActions }}>
+            <div className={styles.layout}>
+                <div className={styles.pageFrame}>
+                <header className={styles.header} role={"banner"}>
+                    <div className={styles.headerContainer} ref={menuRef}>
+                        <nav>
+                            <ul className={`${styles.headerNavList} ${styles.onlyMobile} ${menuOpen ? styles.show : ""}`}>
+                                {actions.map(a => (
+                                    <li key={a.key}>
+                                        <button
+                                            className={styles.headerNavAction}
+                                            onClick={() => {
+                                                setMenuOpen(false);
+                                                a.onClick();
+                                            }}
+                                            disabled={a.disabled}
+                                        >
+                                            {a.label}
+                                        </button>
+                                    </li>
+                                ))}
+                            </ul>
+                        </nav>
                     </div>
-                </div>
-            </header>
+                </header>
 
-            <Outlet />
-        </div>
+            <main className={styles.main} id="main-content">
+                    <Outlet />
+            </main>
+            </div>
+
+                {isHelpOpen && <HelpContent isOpen={isHelpOpen} onClose={() => setIsHelpOpen(false)} />}
+                {isFeedbackOpen && <FeedbackForm isOpen={isFeedbackOpen} onClose={() => setIsFeedbackOpen(false)} />}
+            </div>
+        </HeaderMenuContext.Provider>
     );
 };
 

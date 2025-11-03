@@ -1,28 +1,38 @@
 .historyItem {
+    position: relative;
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: 4px 8px;
+    padding: 10px 7px;
     border-radius: 6px;
-    transition: background-color 0.2s;
 }
 
 .historyItem:hover {
-    background-color: #f3f4f6;
+    background-color: #efefef;
 }
 
 .historyItemButton {
-    flex-grow: 1;
+    flex: 1 1 auto;
+    min-width: 0;
     text-align: left;
     padding: 0;
     margin-right: 4px;
     background: none;
     border: none;
     cursor: pointer;
+    padding-right: 0;
+}
+
+.historyItem:hover .historyItemButton {
+    padding-right: 32px;
 }
 
 .historyItemTitle {
-    font-size: 1rem;
+    display: block;
+    font-size: 14px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 .deleteIcon {
@@ -31,23 +41,29 @@
 }
 
 .deleteButton {
+    position: absolute;
+    right: 8px;
+    top: 50%;
+    transform: translateY(-50%);
     opacity: 0;
-    transition: opacity 0.2s;
+    pointer-events: none;
+    transition: opacity 0.2s ease;
     background: none;
     border: none;
     cursor: pointer;
     padding: 4px;
     border-radius: 9999px;
-    color: #6b7280;
+    color: #e02e2a;
 }
 
 .historyItem:hover .deleteButton,
 .deleteButton:focus {
     opacity: 1;
+    pointer-events: auto;
 }
 
 .deleteButton:hover {
-    color: #111827;
+    color: #fa423e;
 }
 
 .modalOverlay {
@@ -107,7 +123,7 @@
 }
 
 .modalConfirmButton {
-    background-color: #ef4444;
+    background-color: #e02e2a;
     color: white;
 }
 
@@ -116,5 +132,6 @@
 }
 
 .modalConfirmButton:hover {
-    background-color: #dc2626;
+    background-color: #fa423e;
+    color: white;
 }

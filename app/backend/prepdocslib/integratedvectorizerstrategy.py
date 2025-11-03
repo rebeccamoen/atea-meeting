@@ -1,9 +1,10 @@
 import logging
-from typing import Optional
+from typing import Optional, List
 
-from azure.search.documents.indexes._generated.models import (
-    NativeBlobSoftDeleteDeletionDetectionPolicy,
-)
+#from azure.search.documents.indexes._generated.models import (
+#    NativeBlobSoftDeleteDeletionDetectionPolicy,
+#)
+
 from azure.search.documents.indexes.models import (
     AzureOpenAIEmbeddingSkill,
     IndexProjectionMode,
@@ -46,7 +47,8 @@ class IntegratedVectorizerStrategy(Strategy):
         document_action: DocumentAction = DocumentAction.Add,
         search_analyzer_name: Optional[str] = None,
         use_acls: bool = False,
-        category: Optional[str] = None,
+        category: Optional[List[str]] = None,
+        docdate: Optional[str] = None,
     ):
 
         self.list_file_strategy = list_file_strategy
@@ -59,6 +61,7 @@ class IntegratedVectorizerStrategy(Strategy):
         self.search_analyzer_name = search_analyzer_name
         self.use_acls = use_acls
         self.category = category
+        self.docdate = docdate
         self.search_info = search_info
         prefix = f"{self.search_info.index_name}-{self.search_field_name_embedding}"
         self.skillset_name = f"{prefix}-skillset"
@@ -149,7 +152,7 @@ class IntegratedVectorizerStrategy(Strategy):
             type=SearchIndexerDataSourceType.AZURE_BLOB,
             connection_string=self.blob_manager.get_managedidentity_connectionstring(),
             container=ds_container,
-            data_deletion_detection_policy=NativeBlobSoftDeleteDeletionDetectionPolicy(),
+            #data_deletion_detection_policy=NativeBlobSoftDeleteDeletionDetectionPolicy(),
         )
 
         await ds_client.create_or_update_data_source_connection(data_source_connection)

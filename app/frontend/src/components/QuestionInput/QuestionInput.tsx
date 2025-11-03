@@ -1,7 +1,7 @@
 import { useState, useEffect, useContext } from "react";
 import { Stack, TextField } from "@fluentui/react";
 import { Button, Tooltip } from "@fluentui/react-components";
-import { Send28Filled } from "@fluentui/react-icons";
+import { Send28Filled, ArrowCircleUp28Filled } from "@fluentui/react-icons";
 import { useTranslation } from "react-i18next";
 
 import styles from "./QuestionInput.module.css";
@@ -59,7 +59,7 @@ export const QuestionInput = ({ onSend, disabled, placeholder, clearOnSend, init
     const onQuestionChange = (_ev: React.FormEvent<HTMLInputElement | HTMLTextAreaElement>, newValue?: string) => {
         if (!newValue) {
             setQuestion("");
-        } else if (newValue.length <= 1000) {
+        } else if (newValue) {
             setQuestion(newValue);
         }
     };
@@ -87,11 +87,21 @@ export const QuestionInput = ({ onSend, disabled, placeholder, clearOnSend, init
                 onCompositionEnd={handleCompositionEnd}
             />
             <div className={styles.questionInputButtonsContainer}>
+                {showSpeechInput && <SpeechInput updateQuestion={setQuestion} />}
                 <Tooltip content={t("tooltips.submitQuestion")} relationship="label">
-                    <Button size="large" icon={<Send28Filled primaryFill="#008A00" />} disabled={sendQuestionDisabled} onClick={sendQuestion} />
+                    <Button
+                        size="small"
+                        aria-label={t("tooltips.submitQuestion")}
+                        onClick={sendQuestion}
+                        disabled={sendQuestionDisabled}
+                        style={{
+                            color: sendQuestionDisabled ? "#ECECEC" : "#000000"
+                        }}
+                    >
+                        <ArrowCircleUp28Filled style={{ width: 42, height: 42 }} aria-hidden />
+                    </Button>
                 </Tooltip>
             </div>
-            {showSpeechInput && <SpeechInput updateQuestion={setQuestion} />}
         </Stack>
     );
 };

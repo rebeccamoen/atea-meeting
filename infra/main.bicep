@@ -149,12 +149,26 @@ param chatGptDeploymentVersion string = ''
 param chatGptDeploymentSkuName string = ''
 param chatGptDeploymentCapacity int = 0
 
+param chatGptModelName2 string = ''
+param chatGptDeploymentName2 string = ''
+param chatGptDeploymentVersion2 string = ''
+param chatGptDeploymentSkuName2 string = ''
+param chatGptDeploymentCapacity2 int = 0
+
 var chatGpt = {
-  modelName: !empty(chatGptModelName) ? chatGptModelName : 'gpt-4.1-mini'
-  deploymentName: !empty(chatGptDeploymentName) ? chatGptDeploymentName : 'gpt-4.1-mini'
-  deploymentVersion: !empty(chatGptDeploymentVersion) ? chatGptDeploymentVersion : '2025-04-14'
-  deploymentSkuName: !empty(chatGptDeploymentSkuName) ? chatGptDeploymentSkuName : 'GlobalStandard'
-  deploymentCapacity: chatGptDeploymentCapacity != 0 ? chatGptDeploymentCapacity : 30
+  modelName: !empty(chatGptModelName) ? chatGptModelName : 'gpt-4o'
+  deploymentName: !empty(chatGptDeploymentName) ? chatGptDeploymentName : 'gpt-4o'
+  deploymentVersion: !empty(chatGptDeploymentVersion) ? chatGptDeploymentVersion : '2024-05-13'
+  deploymentSkuName: !empty(chatGptDeploymentSkuName) ? chatGptDeploymentSkuName : 'Standard'
+  deploymentCapacity: chatGptDeploymentCapacity != 0 ? chatGptDeploymentCapacity : 10
+}
+
+var chatGpt2 = {
+  modelName: !empty(chatGptModelName2) ? chatGptModelName2 : 'gpt-4.1-mini'
+  deploymentName: !empty(chatGptDeploymentName2) ? chatGptDeploymentName2 : 'gpt-4.1-mini'
+  deploymentVersion: !empty(chatGptDeploymentVersion2) ? chatGptDeploymentVersion2 : '2025-04-14'
+  deploymentSkuName: !empty(chatGptDeploymentSkuName2) ? chatGptDeploymentSkuName2 : 'GlobalStandard'
+  deploymentCapacity: chatGptDeploymentCapacity2 != 0 ? chatGptDeploymentCapacity2 : 30
 }
 
 param embeddingModelName string = ''
@@ -164,12 +178,12 @@ param embeddingDeploymentSkuName string = ''
 param embeddingDeploymentCapacity int = 0
 param embeddingDimensions int = 0
 var embedding = {
-  modelName: !empty(embeddingModelName) ? embeddingModelName : 'text-embedding-3-large'
-  deploymentName: !empty(embeddingDeploymentName) ? embeddingDeploymentName : 'text-embedding-3-large'
+  modelName: !empty(embeddingModelName) ? embeddingModelName : 'text-embedding-ada-002'
+  deploymentName: !empty(embeddingDeploymentName) ? embeddingDeploymentName : 'embedding'
   deploymentVersion: !empty(embeddingDeploymentVersion) ? embeddingDeploymentVersion : (embeddingModelName == 'text-embedding-ada-002' ? '2' : '1')
   deploymentSkuName: !empty(embeddingDeploymentSkuName) ? embeddingDeploymentSkuName : (embeddingModelName == 'text-embedding-ada-002' ? 'Standard' : 'GlobalStandard')
   deploymentCapacity: embeddingDeploymentCapacity != 0 ? embeddingDeploymentCapacity : 30
-  dimensions: embeddingDimensions != 0 ? embeddingDimensions : 3072
+  dimensions: embeddingDimensions != 0 ? embeddingDimensions : 1536
 }
 
 param gpt4vModelName string = ''
@@ -244,6 +258,9 @@ param publicNetworkAccess string = 'Enabled'
 @description('Add a private endpoints for network connectivity')
 param usePrivateEndpoint bool = false
 
+@description('Use a P2S VPN Gateway for secure access to the private endpoints')
+param useVpnGateway bool = false
+
 @description('Id of the user or app to assign application roles')
 param principalId string = ''
 
@@ -266,6 +283,11 @@ param useChatHistoryCosmos bool = false
 param useVectors bool = false
 @description('Use Built-in integrated Vectorization feature of AI Search to vectorize and ingest documents')
 param useIntegratedVectorization bool = false
+
+@secure()
+param feedbackConnectionString string = ''
+param feedbackSender string = ''
+param feedbackTo string = ''
 
 @description('Use media description feature with Azure Content Understanding during ingestion')
 param useMediaDescriberAzureCU bool = true
@@ -433,11 +455,13 @@ var appEnvVariables = {
   AZURE_OPENAI_EMB_MODEL_NAME: embedding.modelName
   AZURE_OPENAI_EMB_DIMENSIONS: embedding.dimensions
   AZURE_OPENAI_CHATGPT_MODEL: chatGpt.modelName
+  AZURE_OPENAI_CHATGPT_MODEL_2: chatGpt2.modelName
   AZURE_OPENAI_GPT4V_MODEL: gpt4v.modelName
   AZURE_OPENAI_REASONING_EFFORT: defaultReasoningEffort
   // Specific to Azure OpenAI
   AZURE_OPENAI_SERVICE: isAzureOpenAiHost && deployAzureOpenAi ? openAi.outputs.name : ''
   AZURE_OPENAI_CHATGPT_DEPLOYMENT: chatGpt.deploymentName
+  AZURE_OPENAI_CHATGPT_DEPLOYMENT_2: chatGpt2.deploymentName
   AZURE_OPENAI_EMB_DEPLOYMENT: embedding.deploymentName
   AZURE_OPENAI_GPT4V_DEPLOYMENT: useGPT4V ? gpt4v.deploymentName : ''
   AZURE_OPENAI_SEARCHAGENT_MODEL: searchAgent.modelName
@@ -458,6 +482,10 @@ var appEnvVariables = {
   AZURE_TENANT_ID: tenantId
   AZURE_AUTH_TENANT_ID: tenantIdForAuth
   AZURE_AUTHENTICATION_ISSUER_URI: authenticationIssuerUri
+  // Email Communcation Service Setup for Feedback
+  FEEDBACK_CONNECTION_STRING: feedbackConnectionString
+  FEEDBACK_SENDER: feedbackSender
+  FEEDBACK_TO: feedbackTo
   // CORS support, for frontends on other hosts
   ALLOWED_ORIGIN: join(allowedOrigins, ';')
   USE_VECTORS: useVectors
@@ -488,7 +516,7 @@ module backend 'core/host/appservice.bicep' = if (deploymentTarget == 'appservic
     appCommandLine: 'python3 -m gunicorn main:app'
     scmDoBuildDuringDeployment: true
     managedIdentity: true
-    virtualNetworkSubnetId: isolation.outputs.appSubnetId
+    virtualNetworkSubnetId: usePrivateEndpoint ? isolation.outputs.appSubnetId : ''
     publicNetworkAccess: publicNetworkAccess
     allowedOrigins: allowedOrigins
     clientAppId: clientAppId
@@ -525,10 +553,12 @@ module containerApps 'core/host/container-apps.bicep' = if (deploymentTarget == 
     name: 'app'
     tags: tags
     location: location
-    workloadProfile: azureContainerAppsWorkloadProfile
     containerAppsEnvironmentName: acaManagedEnvironmentName
     containerRegistryName: '${containerRegistryName}${resourceToken}'
-    logAnalyticsWorkspaceResourceId: useApplicationInsights ? monitoring.outputs.logAnalyticsWorkspaceId : ''
+    logAnalyticsWorkspaceName: useApplicationInsights ? monitoring.outputs.logAnalyticsWorkspaceName : ''
+    subnetResourceId: usePrivateEndpoint ? isolation.outputs.appSubnetId : ''
+    usePrivateIngress: usePrivateEndpoint
+    workloadProfile: azureContainerAppsWorkloadProfile
   }
 }
 
@@ -545,15 +575,13 @@ module acaBackend 'core/host/container-app-upsert.bicep' = if (deploymentTarget 
     location: location
     identityName: (deploymentTarget == 'containerapps') ? acaIdentityName : ''
     exists: webAppExists
-    workloadProfile: azureContainerAppsWorkloadProfile
     containerRegistryName: (deploymentTarget == 'containerapps') ? containerApps.outputs.registryName : ''
     containerAppsEnvironmentName: (deploymentTarget == 'containerapps') ? containerApps.outputs.environmentName : ''
-    identityType: 'UserAssigned'
     tags: union(tags, { 'azd-service-name': 'backend' })
     targetPort: 8000
     containerCpuCoreCount: '1.0'
     containerMemory: '2Gi'
-    containerMinReplicas: 0
+    containerMinReplicas: usePrivateEndpoint ? 1 : 0
     allowedOrigins: allowedOrigins
     env: union(appEnvVariables, {
       // For using managed identity to access Azure resources. See https://github.com/microsoft/azure-container-apps/issues/442
@@ -620,6 +648,19 @@ var defaultOpenAiDeployments = [
 
 var openAiDeployments = concat(
   defaultOpenAiDeployments,
+  [
+    // second chat deployment
+    {
+      name: chatGpt2.deploymentName
+      model: {
+        format: 'OpenAI'
+        name: chatGpt2.modelName
+        version: chatGpt2.deploymentVersion }
+      sku:   {
+        name: chatGpt.deploymentSkuName
+        capacity: chatGpt2.deploymentCapacity }
+    }
+  ],
   useEval
     ? [
       {
@@ -687,7 +728,7 @@ module openAi 'br/public:avm/res/cognitive-services/account:0.7.2' = if (isAzure
     }
     sku: openAiSkuName
     deployments: openAiDeployments
-    disableLocalAuth: azureOpenAiDisableKeys
+    disableLocalAuth: false
   }
 }
 
@@ -789,7 +830,7 @@ module searchService 'core/search/search-services.bicep' = {
     publicNetworkAccess: publicNetworkAccess == 'Enabled'
       ? 'enabled'
       : (publicNetworkAccess == 'Disabled' ? 'disabled' : null)
-    sharedPrivateLinkStorageAccounts: usePrivateEndpoint ? [storage.outputs.id] : []
+    sharedPrivateLinkStorageAccounts: (usePrivateEndpoint && useIntegratedVectorization) ? [storage.outputs.id] : []
   }
 }
 
@@ -812,7 +853,7 @@ module storage 'core/storage/storage-account.bicep' = {
     publicNetworkAccess: publicNetworkAccess
     bypass: bypass
     allowBlobPublicAccess: false
-    allowSharedKeyAccess: false
+    allowSharedKeyAccess: true
     sku: {
       name: storageSkuName
     }
@@ -1156,37 +1197,66 @@ module cosmosDbRoleBackend 'core/security/documentdb-sql-role.bicep' = if (useAu
   }
 }
 
-module isolation 'network-isolation.bicep' = {
+module isolation 'network-isolation.bicep' = if (usePrivateEndpoint) {
   name: 'networks'
   scope: resourceGroup
   params: {
-    deploymentTarget: deploymentTarget
     location: location
     tags: tags
     vnetName: '${abbrs.virtualNetworks}${resourceToken}'
-    // Need to check deploymentTarget due to https://github.com/Azure/bicep/issues/3990
-    appServicePlanName: deploymentTarget == 'appservice' ? appServicePlan.outputs.name : ''
-    usePrivateEndpoint: usePrivateEndpoint
+    deploymentTarget: deploymentTarget
+    useVpnGateway: useVpnGateway
+    vpnGatewayName: useVpnGateway ? '${abbrs.networkVpnGateways}${resourceToken}' : ''
+    dnsResolverName: useVpnGateway ? '${abbrs.privateDnsResolver}${resourceToken}' : ''
   }
 }
 
 var environmentData = environment()
 
-var openAiPrivateEndpointConnection = (isAzureOpenAiHost && deployAzureOpenAi && deploymentTarget == 'appservice')
+var openAiPrivateEndpointConnection = (usePrivateEndpoint && isAzureOpenAiHost && deployAzureOpenAi)
   ? [
       {
         groupId: 'account'
         dnsZoneName: 'privatelink.openai.azure.com'
+        resourceIds: [openAi.outputs.resourceId]
+      }
+    ]
+  : []
+
+var cognitiveServicesPrivateEndpointConnection = (usePrivateEndpoint && (!useLocalPdfParser || useGPT4V || useMediaDescriberAzureCU))
+  ? [
+      {
+        groupId: 'account'
+        dnsZoneName: 'privatelink.cognitiveservices.azure.com'
         resourceIds: concat(
-          [openAi.outputs.resourceId],
+          !useLocalPdfParser ? [documentIntelligence.outputs.resourceId] : [],
           useGPT4V ? [computerVision.outputs.resourceId] : [],
-          useMediaDescriberAzureCU ? [contentUnderstanding.outputs.resourceId] : [],
-          !useLocalPdfParser ? [documentIntelligence.outputs.resourceId] : []
+          useMediaDescriberAzureCU ? [contentUnderstanding.outputs.resourceId] : []
         )
       }
     ]
   : []
-var otherPrivateEndpointConnections = (usePrivateEndpoint && deploymentTarget == 'appservice')
+
+var containerAppsPrivateEndpointConnection = (usePrivateEndpoint && deploymentTarget == 'containerapps')
+  ? [
+      {
+        groupId: 'managedEnvironments'
+        dnsZoneName: 'privatelink.${location}.azurecontainerapps.io'
+        resourceIds: [containerApps.outputs.environmentId]
+      }
+    ]
+  : []
+
+var appServicePrivateEndpointConnection = (usePrivateEndpoint && deploymentTarget == 'appservice')
+  ? [
+      {
+        groupId: 'sites'
+        dnsZoneName: 'privatelink.azurewebsites.net'
+        resourceIds: [backend.outputs.id]
+      }
+    ]
+  : []
+var otherPrivateEndpointConnections = (usePrivateEndpoint)
   ? [
       {
         groupId: 'blob'
@@ -1199,11 +1269,6 @@ var otherPrivateEndpointConnections = (usePrivateEndpoint && deploymentTarget ==
         resourceIds: [searchService.outputs.id]
       }
       {
-        groupId: 'sites'
-        dnsZoneName: 'privatelink.azurewebsites.net'
-        resourceIds: [backend.outputs.id]
-      }
-      {
         groupId: 'sql'
         dnsZoneName: 'privatelink.documents.azure.com'
         resourceIds: (useAuthentication && useChatHistoryCosmos) ? [cosmosDb.outputs.resourceId] : []
@@ -1211,9 +1276,9 @@ var otherPrivateEndpointConnections = (usePrivateEndpoint && deploymentTarget ==
     ]
   : []
 
-var privateEndpointConnections = concat(otherPrivateEndpointConnections, openAiPrivateEndpointConnection)
+var privateEndpointConnections = concat(otherPrivateEndpointConnections, openAiPrivateEndpointConnection, cognitiveServicesPrivateEndpointConnection, containerAppsPrivateEndpointConnection, appServicePrivateEndpointConnection)
 
-module privateEndpoints 'private-endpoints.bicep' = if (usePrivateEndpoint && deploymentTarget == 'appservice') {
+module privateEndpoints 'private-endpoints.bicep' = if (usePrivateEndpoint) {
   name: 'privateEndpoints'
   scope: resourceGroup
   params: {
@@ -1224,7 +1289,7 @@ module privateEndpoints 'private-endpoints.bicep' = if (usePrivateEndpoint && de
     applicationInsightsId: useApplicationInsights ? monitoring.outputs.applicationInsightsId : ''
     logAnalyticsWorkspaceId: useApplicationInsights ? monitoring.outputs.logAnalyticsWorkspaceId : ''
     vnetName: isolation.outputs.vnetName
-    vnetPeSubnetName: isolation.outputs.backendSubnetId
+    vnetPeSubnetId: isolation.outputs.backendSubnetId
   }
 }
 
@@ -1301,6 +1366,9 @@ output AZURE_OPENAI_RESOURCE_GROUP string = isAzureOpenAiHost ? openAiResourceGr
 output AZURE_OPENAI_CHATGPT_DEPLOYMENT string = isAzureOpenAiHost ? chatGpt.deploymentName : ''
 output AZURE_OPENAI_CHATGPT_DEPLOYMENT_VERSION string = isAzureOpenAiHost ? chatGpt.deploymentVersion : ''
 output AZURE_OPENAI_CHATGPT_DEPLOYMENT_SKU string = isAzureOpenAiHost ? chatGpt.deploymentSkuName : ''
+output AZURE_OPENAI_CHATGPT_DEPLOYMENT_2 string = isAzureOpenAiHost ? chatGpt2.deploymentName : ''
+output AZURE_OPENAI_CHATGPT_DEPLOYMENT_VERSION_2 string = isAzureOpenAiHost ? chatGpt2.deploymentVersion : ''
+output AZURE_OPENAI_CHATGPT_DEPLOYMENT_SKU_2 string = isAzureOpenAiHost ? chatGpt2.deploymentSkuName : ''
 output AZURE_OPENAI_EMB_DEPLOYMENT string = isAzureOpenAiHost ? embedding.deploymentName : ''
 output AZURE_OPENAI_EMB_DEPLOYMENT_VERSION string = isAzureOpenAiHost ? embedding.deploymentVersion : ''
 output AZURE_OPENAI_EMB_DEPLOYMENT_SKU string = isAzureOpenAiHost ? embedding.deploymentSkuName : ''
@@ -1352,3 +1420,5 @@ output BACKEND_URI string = deploymentTarget == 'appservice' ? backend.outputs.u
 output AZURE_CONTAINER_REGISTRY_ENDPOINT string = deploymentTarget == 'containerapps'
   ? containerApps.outputs.registryLoginServer
   : ''
+
+output AZURE_VPN_CONFIG_DOWNLOAD_LINK string = useVpnGateway ? 'https://portal.azure.com/#@${tenant().tenantId}/resource${isolation.outputs.virtualNetworkGatewayId}/pointtositeconfiguration' : ''

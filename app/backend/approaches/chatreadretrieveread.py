@@ -1,3 +1,4 @@
+import os
 from collections.abc import Awaitable
 from typing import Any, Optional, Union, cast
 
@@ -79,19 +80,36 @@ class ChatReadRetrieveReadApproach(ChatApproach):
         auth_claims: dict[str, Any],
         should_stream: bool = False,
     ) -> tuple[ExtraInfo, Union[Awaitable[ChatCompletion], Awaitable[AsyncStream[ChatCompletionChunk]]]]:
+        chat_model_key = str(overrides.get("chat_model_key", "2"))
+
+        # pick selected model/deployment
+        selected_model = (
+            os.environ.get("AZURE_OPENAI_CHATGPT_MODEL_2", self.chatgpt_model)
+            if chat_model_key == "1"
+            else os.environ.get("AZURE_OPENAI_CHATGPT_MODEL", self.chatgpt_model)
+        )
+        selected_deployment = (
+            os.environ.get("AZURE_OPENAI_CHATGPT_DEPLOYMENT_2", self.chatgpt_deployment)
+            if chat_model_key == "1"
+            else os.environ.get("AZURE_OPENAI_CHATGPT_DEPLOYMENT", self.chatgpt_deployment)
+        )
+    
         use_agentic_retrieval = True if overrides.get("use_agentic_retrieval") else False
         original_user_query = messages[-1]["content"]
 
+        # check streaming support using the *selected* model
         reasoning_model_support = self.GPT_REASONING_MODELS.get(self.chatgpt_model)
         if reasoning_model_support and (not reasoning_model_support.streaming and should_stream):
-            raise Exception(
-                f"{self.chatgpt_model} does not support streaming. Please use a different model or disable streaming."
-            )
+            raise Exception(f"{selected_model} does not support streaming. Please use a different model or disable streaming.")
+        # run retrieval
         if use_agentic_retrieval:
             extra_info = await self.run_agentic_retrieval_approach(messages, overrides, auth_claims)
         else:
-            extra_info = await self.run_search_approach(messages, overrides, auth_claims)
+            extra_info = await self.run_search_approach(
+                messages, overrides, auth_claims, selected_model, selected_deployment
+            )
 
+        # render final prompt
         messages = self.prompt_manager.render_prompt(
             self.answer_prompt,
             self.get_system_prompt_variables(overrides.get("prompt_template"))
@@ -103,32 +121,33 @@ class ChatReadRetrieveReadApproach(ChatApproach):
             },
         )
 
+        # FINAL answer call uses the *selected* pair
         chat_coroutine = cast(
             Union[Awaitable[ChatCompletion], Awaitable[AsyncStream[ChatCompletionChunk]]],
             self.create_chat_completion(
-                self.chatgpt_deployment,
-                self.chatgpt_model,
+                selected_deployment,
+                selected_model,
                 messages,
                 overrides,
-                self.get_response_token_limit(self.chatgpt_model, 1024),
+                self.get_response_token_limit(selected_model, 1024),
                 should_stream,
             ),
         )
+        # thoughts metadata should also reflect the *selected* pair
         extra_info.thoughts.append(
             self.format_thought_step_for_chatcompletion(
                 title="Prompt to generate answer",
                 messages=messages,
                 overrides=overrides,
-                model=self.chatgpt_model,
-                deployment=self.chatgpt_deployment,
+                model=selected_model,
+                deployment=selected_deployment,
                 usage=None,
             )
         )
         return (extra_info, chat_coroutine)
 
     async def run_search_approach(
-        self, messages: list[ChatCompletionMessageParam], overrides: dict[str, Any], auth_claims: dict[str, Any]
-    ):
+        self, messages: list[ChatCompletionMessageParam], overrides: dict[str, Any], auth_claims: dict[str, Any], selected_model: str, selected_deployment: Optional[str]):
         use_text_search = overrides.get("retrieval_mode") in ["text", "hybrid", None]
         use_vector_search = overrides.get("retrieval_mode") in ["vectors", "hybrid", None]
         use_semantic_ranker = True if overrides.get("semantic_ranker") else False
@@ -153,16 +172,16 @@ class ChatReadRetrieveReadApproach(ChatApproach):
         chat_completion = cast(
             ChatCompletion,
             await self.create_chat_completion(
-                self.chatgpt_deployment,
-                self.chatgpt_model,
+                selected_deployment,
+                selected_model,
                 messages=query_messages,
                 overrides=overrides,
                 response_token_limit=self.get_response_token_limit(
-                    self.chatgpt_model, 100
+                    selected_model, 100
                 ),  # Setting too low risks malformed JSON, setting too high may affect performance
                 temperature=0.0,  # Minimize creativity for search query generation
                 tools=tools,
-                reasoning_effort="low",  # Minimize reasoning for search query generation
+                reasoning_effort=self.get_lowest_reasoning_effort(self.chatgpt_model),
             ),
         )
 
@@ -199,10 +218,10 @@ class ChatReadRetrieveReadApproach(ChatApproach):
                     title="Prompt to generate search query",
                     messages=query_messages,
                     overrides=overrides,
-                    model=self.chatgpt_model,
-                    deployment=self.chatgpt_deployment,
+                    model=selected_model,
+                    deployment=selected_deployment,
                     usage=chat_completion.usage,
-                    reasoning_effort="low",
+                    reasoning_effort=self.get_lowest_reasoning_effort(self.chatgpt_model),
                 ),
                 ThoughtStep(
                     "Search using generated search query",

@@ -54,6 +54,7 @@ coverage.xml
 .hypothesis/
 .pytest_cache/
 cover/
+coverage_report.html
 
 # Translations
 *.mo
@@ -148,5 +149,6 @@ node_modules
 static/
 
 data/**/*.md5
+data/*
 
 .DS_Store

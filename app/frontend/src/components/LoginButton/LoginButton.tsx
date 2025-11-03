@@ -1,6 +1,7 @@
 import { DefaultButton } from "@fluentui/react";
 import { useMsal } from "@azure/msal-react";
 import { useTranslation } from "react-i18next";
+import { AppIcon } from "../../ui/AppIcon";
 
 import styles from "./LoginButton.module.css";
 import { getRedirectUri, loginRequest, appServicesLogout, getUsername, checkLoggedIn } from "../../authConfig";
@@ -57,9 +58,25 @@ export const LoginButton = () => {
     };
     return (
         <DefaultButton
-            text={loggedIn ? `${t("logout")}\n${username}` : `${t("login")}`}
             className={styles.loginButton}
             onClick={loggedIn ? handleLogoutPopup : handleLoginPopup}
-        ></DefaultButton>
+            aria-label={loggedIn ? `${username} — ${t("logout")}` : t("login")}
+        >
+            <div className={styles.loginContent}>
+                <AppIcon name="user" aria-hidden className={styles.loginIcon} />
+                <span className={styles.loginLabel}>
+                    {loggedIn ? (
+                        <>
+                            <span className={styles.loginEmail} title={username}>
+                                {username}
+                            </span>
+                            <span className={styles.loginLogout}>{t("logout")}</span>
+                        </>
+                    ) : (
+                        <span className={styles.loginEmail}>{t("login")}</span>
+                    )}
+                </span>
+            </div>
+        </DefaultButton>
     );
 };

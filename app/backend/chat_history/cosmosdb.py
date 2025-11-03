@@ -38,7 +38,7 @@ async def post_chat_history(auth_claims: dict[str, Any]):
         session_id = request_json.get("id")
         message_pairs = request_json.get("answers")
         first_question = message_pairs[0][0]
-        title = first_question + "..." if len(first_question) > 50 else first_question
+        title = first_question
         timestamp = int(time.time() * 1000)
 
         # Insert the session item:

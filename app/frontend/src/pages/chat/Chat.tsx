@@ -1,13 +1,24 @@
 import { useRef, useState, useEffect, useContext } from "react";
 import { useTranslation } from "react-i18next";
 import { Helmet } from "react-helmet-async";
-import { Panel, DefaultButton } from "@fluentui/react";
+import { useMemo } from "react";
+import { Panel, DefaultButton, IDropdownOption } from "@fluentui/react";
 import readNDJSONStream from "ndjson-readablestream";
 
 import appLogo from "../../assets/applogo.svg";
 import styles from "./Chat.module.css";
 
+import { AppIconButton } from "../../ui/AppIconButton";
+import { AppIcon } from "../../ui/AppIcon";
+import type { AppIconName } from "../../ui/AppIcon";
+
+import { SidebarMenu } from "../../components/SidebarMenu/SidebarMenu";
+
 import atealogo from "./atea_logo.png";
+
+import { useHeaderMenu, type HeaderAction } from "../layout/Layout";
+
+import { setTimeout as workerSetTimeout, clearTimeout as workerClearTimeout } from "worker-timers";
 
 import {
     chatApi,
@@ -27,9 +38,15 @@ import { ExampleList } from "../../components/Example";
 import { UserChatMessage } from "../../components/UserChatMessage";
 import { AnalysisPanel, AnalysisPanelTabs } from "../../components/AnalysisPanel";
 import { HistoryPanel } from "../../components/HistoryPanel";
-import { HistoryProviderOptions, useHistoryManager } from "../../components/HistoryProviders";
+import { HistoryItem } from "../../components/HistoryItem";
+import { HistoryProviderOptions, useHistoryManager, HistoryMetaData } from "../../components/HistoryProviders";
 import { HistoryButton } from "../../components/HistoryButton";
 import { SettingsButton } from "../../components/SettingsButton";
+import { HelpButton } from "../../components/HelpButton";
+import { FeedbackButton } from "../../components/FeedbackButton";
+import { UploadFileButton } from "../../components/UploadFileButton/UploadFileButton";
+import { HelpContent } from "../../components/HelpContent";
+import { FeedbackForm } from "../../components/FeedbackForm";
 import { ClearChatButton } from "../../components/ClearChatButton";
 import { UploadFile } from "../../components/UploadFile";
 import { useLogin, getToken, requireAccessControl } from "../../authConfig";
@@ -38,16 +55,19 @@ import { TokenClaimsDisplay } from "../../components/TokenClaimsDisplay";
 import { LoginContext } from "../../loginContext";
 import { LanguagePicker } from "../../i18n/LanguagePicker";
 import { Settings } from "../../components/Settings/Settings";
+import { LoginButton } from "../../components/LoginButton";
 
 const Chat = () => {
     const [isConfigPanelOpen, setIsConfigPanelOpen] = useState(false);
+    const [isHelpPanelOpen, setIsHelpPanelOpen] = useState(false);
+    const [isFeedbackPanelOpen, setIsFeedbackPanelOpen] = useState(false);
     const [isHistoryPanelOpen, setIsHistoryPanelOpen] = useState(false);
     const [promptTemplate, setPromptTemplate] = useState<string>("");
     const [temperature, setTemperature] = useState<number>(0.3);
     const [seed, setSeed] = useState<number | null>(null);
     const [minimumRerankerScore, setMinimumRerankerScore] = useState<number>(0);
     const [minimumSearchScore, setMinimumSearchScore] = useState<number>(0);
-    const [retrieveCount, setRetrieveCount] = useState<number>(3);
+    const [retrieveCount, setRetrieveCount] = useState<number>(7);
     const [maxSubqueryCount, setMaxSubqueryCount] = useState<number>(10);
     const [resultsMergeStrategy, setResultsMergeStrategy] = useState<string>("interleaved");
     const [retrievalMode, setRetrievalMode] = useState<RetrievalMode>(RetrievalMode.Hybrid);
@@ -65,6 +85,19 @@ const Chat = () => {
     const [useGroupsSecurityFilter, setUseGroupsSecurityFilter] = useState<boolean>(false);
     const [gpt4vInput, setGPT4VInput] = useState<GPT4VInput>(GPT4VInput.TextAndImages);
     const [useGPT4V, setUseGPT4V] = useState<boolean>(false);
+    const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
+
+    const [chatModelKey, setChatModelKey] = useState<"1" | "2">("1");
+
+    const { t, i18n } = useTranslation();
+
+    const chatModelOptions: IDropdownOption[] = useMemo(
+        () => [
+            { key: "1", text: t("labels.chatModelOptions.1") },
+            { key: "2", text: t("labels.chatModelOptions.2") }
+        ],
+        [i18n.language]
+    );
 
     const lastQuestionRef = useRef<string>("");
     const chatMessageStreamEnd = useRef<HTMLDivElement | null>(null);
@@ -87,6 +120,7 @@ const Chat = () => {
     const [showReasoningEffortOption, setShowReasoningEffortOption] = useState<boolean>(false);
     const [showVectorOption, setShowVectorOption] = useState<boolean>(false);
     const [showUserUpload, setShowUserUpload] = useState<boolean>(false);
+    const [isUploadPanelOpen, setIsUploadPanelOpen] = useState(false);
     const [showLanguagePicker, setshowLanguagePicker] = useState<boolean>(false);
     const [showSpeechInput, setShowSpeechInput] = useState<boolean>(false);
     const [showSpeechOutputBrowser, setShowSpeechOutputBrowser] = useState<boolean>(false);
@@ -99,12 +133,63 @@ const Chat = () => {
     const audio = useRef(new Audio()).current;
     const [isPlaying, setIsPlaying] = useState(false);
 
+    const { setActions } = useHeaderMenu();
+
     const speechConfig: SpeechConfig = {
         speechUrls,
         setSpeechUrls,
         audio,
         isPlaying,
         setIsPlaying
+    };
+
+    const client = useLogin ? useMsal().instance : undefined;
+    const { loggedIn } = useContext(LoginContext);
+
+    const historyProvider = (() => {
+        if (useLogin && showChatHistoryCosmos) return HistoryProviderOptions.CosmosDB;
+        if (showChatHistoryBrowser) return HistoryProviderOptions.IndexedDB;
+        return HistoryProviderOptions.None;
+    })();
+    const historyManager = useHistoryManager(historyProvider);
+
+    const [history, setHistory] = useState<HistoryMetaData[]>([]);
+
+    // initial load once
+    useEffect(() => {
+        historyManager.resetContinuationToken();
+        loadMoreHistory();
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
+
+    // refresh whenever notify flips
+    useEffect(() => {
+        if (!(!isStreaming && !isLoading)) return;
+        setHistory([]);
+        historyManager.resetContinuationToken();
+        loadMoreHistory();
+    }, [isStreaming, isLoading, historyManager]);
+
+    const loadMoreHistory = async () => {
+        const token = client ? await getToken(client) : undefined;
+        const items = await historyManager.getNextItems(20, token);
+        setHistory(prev => [...prev, ...items]);
+    };
+
+    const handleSelect = async (id: string) => {
+        const token = client ? await getToken(client) : undefined;
+        const chat = await historyManager.getItem(id, token);
+        if (chat) {
+            setCurrentSessionId(id); // 🔑 Viktig: dette er den globale ID-en for sesjonen (samme som History id)
+            setAnswers(chat);
+            lastQuestionRef.current = chat[chat.length - 1][0];
+        }
+    };
+
+    const handleDelete = async (id: string) => {
+        const token = client ? await getToken(client) : undefined;
+        await historyManager.deleteItem(id, token);
+        setHistory(prev => prev.filter(it => it.id !== id));
     };
 
     const getConfig = async () => {
@@ -148,16 +233,18 @@ const Chat = () => {
         let answer: string = "";
         let askResponse: ChatAppResponse = {} as ChatAppResponse;
 
+        // I handleAsyncRequest ➜ updateState:
         const updateState = (newContent: string) => {
-            return new Promise(resolve => {
-                setTimeout(() => {
+            return new Promise<void>(resolve => {
+                const id = workerSetTimeout(() => {
                     answer += newContent;
-                    const latestResponse: ChatAppResponse = {
+                    const latest: ChatAppResponse = {
                         ...askResponse,
-                        message: { content: answer, role: askResponse.message.role }
+                        message: { ...askResponse.message, content: answer }
                     };
-                    setStreamedAnswers([...answers, [question, latestResponse]]);
-                    resolve(null);
+                    setStreamedAnswers([...answers, [question, latest]]);
+                    workerClearTimeout(id);
+                    resolve();
                 }, 33);
             });
         };
@@ -186,16 +273,6 @@ const Chat = () => {
         };
         return fullResponse;
     };
-
-    const client = useLogin ? useMsal().instance : undefined;
-    const { loggedIn } = useContext(LoginContext);
-
-    const historyProvider: HistoryProviderOptions = (() => {
-        if (useLogin && showChatHistoryCosmos) return HistoryProviderOptions.CosmosDB;
-        if (showChatHistoryBrowser) return HistoryProviderOptions.IndexedDB;
-        return HistoryProviderOptions.None;
-    })();
-    const historyManager = useHistoryManager(historyProvider);
 
     const makeApiRequest = async (question: string) => {
         lastQuestionRef.current = question;
@@ -239,6 +316,7 @@ const Chat = () => {
                         gpt4v_input: gpt4vInput,
                         language: i18n.language,
                         use_agentic_retrieval: useAgenticRetrieval,
+                        chat_model_key: chatModelKey,
                         ...(seed !== null ? { seed: seed } : {})
                     }
                 },
@@ -259,6 +337,7 @@ const Chat = () => {
                 if (typeof parsedResponse.session_state === "string" && parsedResponse.session_state !== "") {
                     const token = client ? await getToken(client) : undefined;
                     historyManager.addItem(parsedResponse.session_state, [...answers, [question, parsedResponse]], token);
+                    setCurrentSessionId(parsedResponse.session_state);
                 }
             } else {
                 const parsedResponse: ChatAppResponseOrError = await response.json();
@@ -269,6 +348,7 @@ const Chat = () => {
                 if (typeof parsedResponse.session_state === "string" && parsedResponse.session_state !== "") {
                     const token = client ? await getToken(client) : undefined;
                     historyManager.addItem(parsedResponse.session_state, [...answers, [question, parsedResponse as ChatAppResponse]], token);
+                    setCurrentSessionId(parsedResponse.session_state);
                 }
             }
             setSpeechUrls([...speechUrls, null]);
@@ -353,6 +433,9 @@ const Chat = () => {
             case "useSuggestFollowupQuestions":
                 setUseSuggestFollowupQuestions(value);
                 break;
+            case "chatModelKey":
+                setChatModelKey(value);
+                break;
             case "useGPT4V":
                 setUseGPT4V(value);
                 break;
@@ -367,6 +450,7 @@ const Chat = () => {
                 break;
             case "useAgenticRetrieval":
                 setUseAgenticRetrieval(value);
+                break;
         }
     };
 
@@ -395,127 +479,188 @@ const Chat = () => {
         setSelectedAnswer(index);
     };
 
-    const { t, i18n } = useTranslation();
+    type MenuItem = {
+        key: string;
+        label: string;
+        size: string;
+        icon: AppIconName;
+        onClick: () => void;
+        disabled?: boolean;
+        show?: boolean;
+    };
+
+    const menuItems = useMemo<MenuItem[]>(
+        () => [
+            {
+                key: "clear",
+                label: t("clearChat"),
+                icon: "clear",
+                onClick: clearChat,
+                disabled: !lastQuestionRef.current || isLoading,
+                show: true,
+                size: "sm"
+            },
+            {
+                key: "help",
+                label: t("Help"),
+                icon: "info",
+                onClick: () => setIsHelpPanelOpen(true),
+                show: true,
+                size: "sm"
+            },
+            {
+                key: "feedback",
+                label: t("Feedback"),
+                icon: "feedback",
+                onClick: () => setIsFeedbackPanelOpen(true),
+                show: true,
+                size: "sm"
+            },
+            {
+                key: "settings",
+                label: t("developerSettings"),
+                icon: "settings",
+                onClick: () => setIsConfigPanelOpen(true),
+                show: true,
+                size: "sm"
+            }
+        ],
+        [t, clearChat, isLoading, lastQuestionRef, loggedIn, showUserUpload]
+    );
+
+    const historyNode = (
+        <>
+            {history.map(item => (
+                <HistoryItem key={item.id} item={item} onSelect={handleSelect} onDelete={handleDelete} />
+            ))}
+        </>
+    );
+
+    const footerExpanded = useLogin ? <LoginButton data-login-button-proxy /> : null;
+
+    const footerCollapsed = useLogin ? <AppIconButton icon={loggedIn ? "user" : "signin"} size="lg" slot="sidebar" disabled={loggedIn} /> : null;
 
     return (
         <div className={styles.container}>
-            {/* Setting the page title using react-helmet-async */}
             <Helmet>
                 <title>{t("pageTitle")}</title>
             </Helmet>
-            <div className={styles.commandsSplitContainer}>
-                <div className={styles.commandsContainer}>
-                    {((useLogin && showChatHistoryCosmos) || showChatHistoryBrowser) && (
-                        <HistoryButton className={styles.commandButton} onClick={() => setIsHistoryPanelOpen(!isHistoryPanelOpen)} />
-                    )}
-                </div>
-                <div className={styles.commandsContainer}>
-                    <ClearChatButton className={styles.commandButton} onClick={clearChat} disabled={!lastQuestionRef.current || isLoading} />
-                    {showUserUpload && <UploadFile className={styles.commandButton} disabled={!loggedIn} />}
-                    <SettingsButton className={styles.commandButton} onClick={() => setIsConfigPanelOpen(!isConfigPanelOpen)} />
-                </div>
-            </div>
+
+            <SidebarMenu
+                items={menuItems}
+                historyList={historyNode}
+                footerExpanded={footerExpanded}
+                footerCollapsed={footerCollapsed}
+            />
+
             <div className={styles.chatRoot} style={{ marginLeft: isHistoryPanelOpen ? "300px" : "0" }}>
-                <div className={styles.chatContainer}>
-                    {!lastQuestionRef.current ? (
-                        <div className={styles.chatEmptyState}>
-                            <img src={atealogo} alt="Atea" aria-label="Atea" height="75px" />
-
-                            <h1 className={styles.chatEmptyStateTitle}>{t("chatEmptyStateTitle")}</h1>
-                            <h2 className={styles.chatEmptyStateSubtitle}>{t("chatEmptyStateSubtitle")}</h2>
-                            {showLanguagePicker && <LanguagePicker onLanguageChange={newLang => i18n.changeLanguage(newLang)} />}
-
-                            <ExampleList onExampleClicked={onExampleClicked} useGPT4V={useGPT4V} />
-                        </div>
-                    ) : (
-                        <div className={styles.chatMessageStream}>
-                            {isStreaming &&
-                                streamedAnswers.map((streamedAnswer, index) => (
-                                    <div key={index}>
-                                        <UserChatMessage message={streamedAnswer[0]} />
-                                        <div className={styles.chatMessageGpt}>
-                                            <Answer
-                                                isStreaming={true}
-                                                key={index}
-                                                answer={streamedAnswer[1]}
-                                                index={index}
-                                                speechConfig={speechConfig}
-                                                isSelected={false}
-                                                onCitationClicked={c => onShowCitation(c, index)}
-                                                onThoughtProcessClicked={() => onToggleTab(AnalysisPanelTabs.ThoughtProcessTab, index)}
-                                                onSupportingContentClicked={() => onToggleTab(AnalysisPanelTabs.SupportingContentTab, index)}
-                                                onFollowupQuestionClicked={q => makeApiRequest(q)}
-                                                showFollowupQuestions={useSuggestFollowupQuestions && answers.length - 1 === index}
-                                                showSpeechOutputAzure={showSpeechOutputAzure}
-                                                showSpeechOutputBrowser={showSpeechOutputBrowser}
-                                            />
-                                        </div>
+                <div className={styles.chatMain}>
+                    <div className={styles.chatContainer}>
+                        {!lastQuestionRef.current ? (
+                            <div className={styles.chatEmptyState}>
+                                <div className={styles.logoContainer}>
+                                    <img src={atealogo} alt="Atea" aria-label="Atea" height="75px" />
                                     </div>
-                                ))}
-                            {!isStreaming &&
-                                answers.map((answer, index) => (
-                                    <div key={index}>
-                                        <UserChatMessage message={answer[0]} />
-                                        <div className={styles.chatMessageGpt}>
-                                            <Answer
-                                                isStreaming={false}
-                                                key={index}
-                                                answer={answer[1]}
-                                                index={index}
-                                                speechConfig={speechConfig}
-                                                isSelected={selectedAnswer === index && activeAnalysisPanelTab !== undefined}
-                                                onCitationClicked={c => onShowCitation(c, index)}
-                                                onThoughtProcessClicked={() => onToggleTab(AnalysisPanelTabs.ThoughtProcessTab, index)}
-                                                onSupportingContentClicked={() => onToggleTab(AnalysisPanelTabs.SupportingContentTab, index)}
-                                                onFollowupQuestionClicked={q => makeApiRequest(q)}
-                                                showFollowupQuestions={useSuggestFollowupQuestions && answers.length - 1 === index}
-                                                showSpeechOutputAzure={showSpeechOutputAzure}
-                                                showSpeechOutputBrowser={showSpeechOutputBrowser}
-                                            />
-                                        </div>
-                                    </div>
-                                ))}
-                            {isLoading && (
+                            </div>
+                        ) : (
+                            <div className={styles.chatMessages}>
+                                <div className={styles.chatMessageStream}>
+                                    {isStreaming &&
+                                        streamedAnswers.map((streamedAnswer, index) => (
+                                            <div key={index}>
+                                                <UserChatMessage message={streamedAnswer[0]} />
+                                                <div className={styles.chatMessageGpt}>
+                                                    <Answer
+                                                        sessionId={currentSessionId ?? undefined}
+                                                        isStreaming={true}
+                                                        key={index}
+                                                        answer={streamedAnswer[1]}
+                                                        index={index}
+                                                        speechConfig={speechConfig}
+                                                        isSelected={false}
+                                                        onCitationClicked={c => onShowCitation(c, index)}
+                                                        onThoughtProcessClicked={() => onToggleTab(AnalysisPanelTabs.ThoughtProcessTab, index)}
+                                                        onSupportingContentClicked={() => onToggleTab(AnalysisPanelTabs.SupportingContentTab, index)}
+                                                        onFollowupQuestionClicked={q => makeApiRequest(q)}
+                                                        showFollowupQuestions={useSuggestFollowupQuestions && answers.length - 1 === index}
+                                                        showSpeechOutputAzure={showSpeechOutputAzure}
+                                                        showSpeechOutputBrowser={showSpeechOutputBrowser}
+                                                    />
+                                                </div>
+                                            </div>
+                                        ))}
+                                    {!isStreaming &&
+                                        answers.map((answer, index) => (
+                                            <div key={index}>
+                                                <UserChatMessage message={answer[0]} />
+                                                <div className={styles.chatMessageGpt}>
+                                                    <Answer
+                                                        sessionId={currentSessionId ?? undefined}
+                                                        isStreaming={false}
+                                                        key={index}
+                                                        answer={answer[1]}
+                                                        index={index}
+                                                        speechConfig={speechConfig}
+                                                        isSelected={selectedAnswer === index && activeAnalysisPanelTab !== undefined}
+                                                        onCitationClicked={c => onShowCitation(c, index)}
+                                                        onThoughtProcessClicked={() => onToggleTab(AnalysisPanelTabs.ThoughtProcessTab, index)}
+                                                        onSupportingContentClicked={() => onToggleTab(AnalysisPanelTabs.SupportingContentTab, index)}
+                                                        onFollowupQuestionClicked={q => makeApiRequest(q)}
+                                                        showFollowupQuestions={useSuggestFollowupQuestions && answers.length - 1 === index}
+                                                        showSpeechOutputAzure={showSpeechOutputAzure}
+                                                        showSpeechOutputBrowser={showSpeechOutputBrowser}
+                                                    />
+                                                </div>
+                                            </div>
+                                        ))}
+                                    {isLoading && (
+                                        <>
+                                            <UserChatMessage message={lastQuestionRef.current} />
+                                            <div className={styles.chatMessageGptMinWidth}>
+                                                <AnswerLoading />
+                                            </div>
+                                        </>
+                                    )}
+                                    {error ? (
+                                        <>
+                                            <UserChatMessage message={lastQuestionRef.current} />
+                                            <div className={styles.chatMessageGptMinWidth}>
+                                                <AnswerError error={error.toString()} onRetry={() => makeApiRequest(lastQuestionRef.current)} />
+                                            </div>
+                                        </>
+                                    ) : null}
+                                    <div ref={chatMessageStreamEnd} />
+                                </div>
+                            </div>
+                        )}
+
+                        <div className={styles.chatInput}>
+                            <QuestionInput
+                                clearOnSend
+                                placeholder={t("defaultExamples.placeholder")}
+                                disabled={isLoading}
+                                onSend={question => makeApiRequest(question)}
+                                showSpeechInput={showSpeechInput}
+                            />
+                            {!lastQuestionRef.current && (
                                 <>
-                                    <UserChatMessage message={lastQuestionRef.current} />
-                                    <div className={styles.chatMessageGptMinWidth}>
-                                        <AnswerLoading />
-                                    </div>
+                                    <ExampleList onExampleClicked={onExampleClicked} useGPT4V={useGPT4V} />
                                 </>
                             )}
-                            {error ? (
-                                <>
-                                    <UserChatMessage message={lastQuestionRef.current} />
-                                    <div className={styles.chatMessageGptMinWidth}>
-                                        <AnswerError error={error.toString()} onRetry={() => makeApiRequest(lastQuestionRef.current)} />
-                                    </div>
-                                </>
-                            ) : null}
-                            <div ref={chatMessageStreamEnd} />
                         </div>
-                    )}
-
-                    <div className={styles.chatInput}>
-                        <QuestionInput
-                            clearOnSend
-                            placeholder={t("defaultExamples.placeholder")}
-                            disabled={isLoading}
-                            onSend={question => makeApiRequest(question)}
-                            showSpeechInput={showSpeechInput}
-                        />
                     </div>
-                </div>
 
-                {answers.length > 0 && activeAnalysisPanelTab && (
-                    <AnalysisPanel
-                        className={styles.chatAnalysisPanel}
-                        activeCitation={activeCitation}
-                        onActiveTabChanged={x => onToggleTab(x, selectedAnswer)}
-                        citationHeight="810px"
-                        answer={answers[selectedAnswer][1]}
-                        activeTab={activeAnalysisPanelTab}
-                    />
-                )}
+                    {answers.length > 0 && activeAnalysisPanelTab && (
+                        <AnalysisPanel
+                            className={styles.chatAnalysisPanel}
+                            activeCitation={activeCitation}
+                            onActiveTabChanged={x => onToggleTab(x, selectedAnswer)}
+                            citationHeight="810px"
+                            answer={answers[selectedAnswer][1]}
+                            activeTab={activeAnalysisPanelTab}
+                        />
+                    )}
+                </div>
 
                 {((useLogin && showChatHistoryCosmos) || showChatHistoryBrowser) && (
                     <HistoryPanel
@@ -531,13 +676,21 @@ const Chat = () => {
                     />
                 )}
 
+                {isHelpPanelOpen && <HelpContent isOpen={isHelpPanelOpen} onClose={() => setIsHelpPanelOpen(false)} />}
+                {isFeedbackPanelOpen && <FeedbackForm isOpen={isFeedbackPanelOpen} onClose={() => setIsFeedbackPanelOpen(false)} />}
+                {showUserUpload && <UploadFile asPanel isOpen={isUploadPanelOpen} onDismiss={() => setIsUploadPanelOpen(false)} />}
+
                 <Panel
                     headerText={t("labels.headerText")}
                     isOpen={isConfigPanelOpen}
                     isBlocking={false}
                     onDismiss={() => setIsConfigPanelOpen(false)}
                     closeButtonAriaLabel={t("labels.closeButton")}
-                    onRenderFooterContent={() => <DefaultButton onClick={() => setIsConfigPanelOpen(false)}>{t("labels.closeButton")}</DefaultButton>}
+                    onRenderFooterContent={() => (
+                        <div className={styles.panelFooter}>
+                            <DefaultButton onClick={() => setIsConfigPanelOpen(false)} text={t("labels.closeButton")} className={styles.panelCloseButton} />
+                        </div>
+                    )}
                     isFooterAtBottom={true}
                 >
                     <Settings
@@ -572,12 +725,14 @@ const Chat = () => {
                         shouldStream={shouldStream}
                         streamingEnabled={streamingEnabled}
                         useSuggestFollowupQuestions={useSuggestFollowupQuestions}
-                        showSuggestFollowupQuestions={true}
+                        showSuggestFollowupQuestions={false}
                         showAgenticRetrievalOption={showAgenticRetrievalOption}
                         useAgenticRetrieval={useAgenticRetrieval}
+                        chatModelKey={chatModelKey}
+                        chatModelOptions={chatModelOptions}
                         onChange={handleSettingsChange}
                     />
-                    {useLogin && <TokenClaimsDisplay />}
+                    {/* {useLogin && <TokenClaimsDisplay />} */}
                 </Panel>
             </div>
         </div>

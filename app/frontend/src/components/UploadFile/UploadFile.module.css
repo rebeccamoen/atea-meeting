@@ -1,9 +1,34 @@
-.container {
+.responsiveButton {
     display: flex;
     align-items: center;
     gap: 0.375em;
     cursor: pointer;
     padding: 0.5rem;
+}
+
+.buttonText {
+    display: inline;
+}
+
+.panelCloseButton {
+  background-color: #ffffff;
+  border: 2px solid #cccccc;
+  border-radius: 5px;
+  color: #07376d;
+}
+
+.panelCloseButton:hover,
+.panelCloseButton:active {
+  background-color: #cccccc;
+  border-color: #cccccc;
+  color: #07376d;
+}
+
+/* Responsive styling */
+@media (max-width: 600px) {
+    .buttonText {
+        display: none;
+    }
 }
 
 .callout {
@@ -24,3 +49,4 @@
     text-overflow: ellipsis;
     margin-bottom: 0.75em;
 }
+

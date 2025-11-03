@@ -1,0 +1,110 @@
+:root {
+  --primary: #07376d;
+  --white: #ffffff;
+  --gray: #cccccc;
+  --radius: 5px;
+}
+
+.helpDialogContainer {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    padding: 1.5rem;
+    background-color: white;
+    border-radius: 0.5rem;
+    box-shadow:
+        0px 0.5rem 1rem rgba(0, 0, 0, 0.14),
+        0px 0px 0.125rem rgba(0, 0, 0, 0.12);
+    max-width: 90vw;
+    max-height: 80vh;
+    overflow-y: auto;
+    overflow-x: hidden;
+}
+
+.helpDialogContent {
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-start;
+    align-items: flex-start;
+    width: 100%;
+    text-align: left;
+    padding: 1rem;
+}
+
+.helpDialogContent h1 {
+    font-size: 1.5rem;
+    font-weight: 700;
+    margin-bottom: 1rem;
+    color: #07376d;
+}
+
+.helpDialogContent h2 {
+    font-size: 1.2rem;
+    font-weight: 600;
+    margin-bottom: 0.75rem;
+    color: #07376d;
+}
+
+.helpDialogContent h3 {
+    font-size: 1rem;
+    font-weight: 500;
+    margin-bottom: 0.5rem;
+    color: #07376d;
+}
+
+.helpDialogContent p,
+.helpDialogContent ul {
+    margin-bottom: 1rem;
+    word-wrap: break-word;
+    white-space: normal;
+    line-height: 1.5;
+    color: #222222;
+}
+
+.helpImage {
+    display: block;
+    margin-left: auto;
+    margin-right: auto;
+    height: 30px;
+    width: auto;
+    object-fit: contain;
+}
+
+.inlineImage {
+    margin-left: 10px;
+    vertical-align: middle;
+    height: 20px;
+}
+
+:global(.ms-Button).closeButton {
+  background-color: var(--white);
+  border-color: var(--gray);
+  border-width: 2px;
+  border-style: solid;
+  border-radius: var(--radius);
+  color: var(--primary);
+}
+
+:global(.ms-Button).closeButton:hover,
+:global(.ms-Button).closeButton:active {
+  background-color: var(--gray);
+  border-color: var(--gray);
+  color: var(--primary);
+}
+
+@media (min-width: 992px) {
+    .helpDialogContainer {
+        width: 60%;
+        max-width: 800px;
+    }
+}
+
+@media (max-width: 991px) {
+    .helpDialogContainer {
+        width: 90%;
+        height: auto;
+        max-height: 90vh;
+        padding: 1rem;
+    }
+}

@@ -13,9 +13,9 @@ interface Props {
 export const ClearChatButton = ({ className, disabled, onClick }: Props) => {
     const { t, i18n } = useTranslation();
     return (
-        <div className={`${styles.container} ${className ?? ""}`}>
+        <div className={`${styles.responsiveButton} ${className ?? ""}`}>
             <Button icon={<Delete24Regular />} disabled={disabled} onClick={onClick}>
-                {t("clearChat")}
+            <span className={styles.buttonText}>{t("clearChat")}</span>
             </Button>
         </div>
     );

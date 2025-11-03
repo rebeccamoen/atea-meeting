@@ -57,7 +57,7 @@
       "value": "${AZURE_DOCUMENTINTELLIGENCE_LOCATION}"
     },
     "searchIndexName": {
-      "value": "${AZURE_SEARCH_INDEX=gptkbindex}"
+      "value": "${AZURE_SEARCH_INDEX}"
     },
     "searchServiceName": {
       "value": "${AZURE_SEARCH_SERVICE}"
@@ -102,7 +102,7 @@
       "value": "${AZURE_APP_SERVICE_PLAN}"
     },
     "appServiceSkuName": {
-      "value": "${AZURE_APP_SERVICE_SKU=S1}"
+      "value": "${AZURE_APP_SERVICE_SKU=P0v3}"
     },
     "backendServiceName": {
       "value": "${AZURE_APP_SERVICE}"
@@ -121,6 +121,21 @@
     },
     "chatGptDeploymentCapacity":{
       "value": "${AZURE_OPENAI_CHATGPT_DEPLOYMENT_CAPACITY}"
+    },
+      "chatGptModelName2":{
+      "value": "${AZURE_OPENAI_CHATGPT_MODEL_2}"
+    },
+    "chatGptDeploymentName2": {
+      "value": "${AZURE_OPENAI_CHATGPT_DEPLOYMENT_2}"
+    },
+    "chatGptDeploymentVersion2":{
+      "value": "${AZURE_OPENAI_CHATGPT_DEPLOYMENT_VERSION_2}"
+    },
+    "chatGptDeploymentSkuName2":{
+      "value": "${AZURE_OPENAI_CHATGPT_DEPLOYMENT_SKU_2}"
+    },
+    "chatGptDeploymentCapacity2":{
+      "value": "${AZURE_OPENAI_CHATGPT_DEPLOYMENT_CAPACITY_2}"
     },
     "embeddingModelName":{
       "value": "${AZURE_OPENAI_EMB_MODEL_NAME}"
@@ -314,6 +329,9 @@
     "usePrivateEndpoint": {
       "value": "${AZURE_USE_PRIVATE_ENDPOINT=false}"
     },
+    "useVpnGateway": {
+      "value": "${AZURE_USE_VPN_GATEWAY=false}"
+    },
     "bypass": {
       "value": "${AZURE_NETWORK_BYPASS=AzureServices}"
     },
@@ -343,6 +361,15 @@
     },
     "azureContainerAppsWorkloadProfile": {
       "value": "${AZURE_CONTAINER_APPS_WORKLOAD_PROFILE=Consumption}"
+    },
+    "feedbackConnectionString": {
+      "value": "${FEEDBACK_CONNECTION_STRING}"
+    },
+    "feedbackSender": {
+      "value": "${FEEDBACK_SENDER}"
+    },
+    "feedbackTo": {
+      "value": "${FEEDBACK_TO}"
     },
     "useMediaDescriberAzureCU": {
       "value": "${USE_MEDIA_DESCRIBER_AZURE_CU=false}"

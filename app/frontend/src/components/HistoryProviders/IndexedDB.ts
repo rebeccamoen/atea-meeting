@@ -82,7 +82,7 @@ export class IndexedDBProvider implements IHistoryProvider {
         if (current) {
             await tx.objectStore(this.storeName).put({ ...current, id, timestamp, answers });
         } else {
-            const title = answers[0][0].length > 50 ? answers[0][0].substring(0, 50) + "..." : answers[0][0];
+            const title = answers[0][0]; // keep full text; UI will ellipsize
             await tx.objectStore(this.storeName).add({ id, title, timestamp, answers });
         }
         await tx.done;

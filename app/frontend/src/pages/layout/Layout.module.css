@@ -1,27 +1,50 @@
+.pageFrame {
+    margin-left: var(--sidebar-offset);
+    transition: margin-left 200ms ease;
+
+    display: flex;
+    flex-direction: column;
+    min-height: 100dvh;
+    max-height: 100dvh;
+    overflow: hidden;
+}
+
 .layout {
     display: flex;
     flex-direction: column;
     height: 100%;
 }
 
+.main {
+    display: flex;
+    flex: 1;
+    min-height: 0;
+}
+
 .header {
-    background-color: #ffffff;
-    color: #1F2325;
+    color: #222222;
+    position: fixed;
+    top: 0;
+  left: 0;
+  right: 0;
+  z-index: 1000;
+  background: #fff;       /* ensure text doesn’t show through */
+  height: var(--header-height);
+  display: flex;          /* if you need layout inside */
+  align-items: center;
 }
 
 .headerContainer {
-    display: flex;
     align-items: center;
     justify-content: space-between;
     padding-left: 1rem;
     padding-right: 1rem;
-    position: relative;
 }
 
 .headerTitleContainer {
     display: flex;
     align-items: center;
-    color: #1F2325;
+    color: #222222;
     text-decoration: none;
 }
 
@@ -47,17 +70,19 @@
     list-style: none;
     padding: 1.1rem;
     align-items: flex-end;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08);
+    border: 1px solid rgba(0, 0, 0, 0.06);
+    border-radius: 10px;
 }
 
 .headerNavList.show {
-    display: flex; /* Show when toggled */
+    display: flex;
 }
 
 .headerNavPageLink {
     padding: 1rem;
-    border-bottom: 1px solid #1F2325;
     text-align: right;
-    color: #1F2325;
+    color: #222222;
     text-decoration: none;
     opacity: 0.75;
     transition-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
@@ -71,7 +96,7 @@
 }
 
 .headerNavPageLinkActive {
-    color: #008A00;
+    color: #222222;
     text-decoration: none;
     font-size: 1.2rem;
     text-align: right;
@@ -86,7 +111,7 @@
     display: block;
     background: none;
     border: none;
-    color: #008A00;
+    color: #222222;
     font-size: 1.5rem;
     cursor: pointer;
     z-index: 101;
@@ -95,50 +120,47 @@
 .loginMenuContainer {
     display: flex;
     align-items: center;
-    gap: 0; /* Ensure no gap between login button and menu toggle */
+    gap: 0;
 }
 
-@media (min-width: 992px) {
-    .headerTitle {
-        font-weight: 600;
-    }
+.headerNavAction {
+    background: none;
+    border: none;
+    font: inherit;
+    cursor: pointer;
+    padding: 0.9rem 1.2rem;
+    border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+    text-align: right;
+    color: #1f2325;
+    opacity: 0.9;
+    width: 100%;
+}
+.headerNavAction:hover {
+    opacity: 1;
+}
 
-    .headerNavList {
-        display: flex;
-        flex-direction: row;
-        list-style: none;
-        padding: 0;
-        position: static;
-        width: auto;
-    }
+.headerNavPageLinkActive {
+    color: #f2f2f2;
+    text-decoration: none;
+}
 
-    .headerNavPageLink {
-        border-bottom: none;
-        padding: 0;
-        display: block;
-    }
+.headerNavLeftMargin {
+    margin-left: 1.25rem;
+    display: block;
+}
 
-    .headerNavPageLink:hover {
-        opacity: 1;
-    }
+.headerRightText {
+    font-weight: normal;
+    display: inline-block;
+    vertical-align: middle;
+}
 
-    .headerNavPageLinkActive {
-        color: #008A00;
-        text-decoration: none;
-    }
+.menuToggle {
+    display: none;
+}
 
-    .headerNavLeftMargin {
-        margin-left: 1.25rem;
-        display: block;
-    }
-
-    .headerRightText {
-        font-weight: normal;
-        display: inline-block;
-        vertical-align: middle;
-    }
-
-    .menuToggle {
-        display: none;
+@media (max-width: 800px) {
+    .headerContainer {
+        padding-left: 50px;
     }
 }

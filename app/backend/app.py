@@ -4,10 +4,14 @@ import json
 import logging
 import mimetypes
 import os
+import re
 import time
+import asyncio
 from collections.abc import AsyncGenerator
 from pathlib import Path
 from typing import Any, Union, cast
+
+from feedback import send_feedback_email
 
 from azure.cognitiveservices.speech import (
     ResultReason,
@@ -31,6 +35,7 @@ from azure.storage.blob.aio import StorageStreamDownloader as BlobDownloader
 from azure.storage.filedatalake.aio import FileSystemClient
 from azure.storage.filedatalake.aio import StorageStreamDownloader as DatalakeDownloader
 from openai import AsyncAzureOpenAI, AsyncOpenAI
+from opentelemetry import trace
 from opentelemetry.instrumentation.aiohttp_client import AioHttpClientInstrumentor
 from opentelemetry.instrumentation.asgi import OpenTelemetryMiddleware
 from opentelemetry.instrumentation.httpx import (
@@ -49,6 +54,8 @@ from quart import (
     send_from_directory,
 )
 from quart_cors import cors
+
+from generatefiles import build_from_request_json
 
 from approaches.approach import Approach
 from approaches.chatreadretrieveread import ChatReadRetrieveReadApproach
@@ -134,6 +141,10 @@ async def assets(path):
 @bp.route("/content/<path>")
 @authenticated_path
 async def content_file(path: str, auth_claims: dict[str, Any]):
+    oid = auth_claims.get("oid")
+    span = trace.get_current_span()
+    if span and oid:
+        span.set_attribute("enduser.id", oid)
     """
     Serve content files from blob storage from within the app to keep the example self-contained.
     *** NOTE *** if you are using app services authentication, this route will return unauthorized to all users that are not logged in
@@ -179,6 +190,10 @@ async def content_file(path: str, auth_claims: dict[str, Any]):
 @bp.route("/ask", methods=["POST"])
 @authenticated
 async def ask(auth_claims: dict[str, Any]):
+    oid = auth_claims.get("oid")
+    span = trace.get_current_span()
+    if span and oid:
+        span.set_attribute("enduser.id", oid)
     if not request.is_json:
         return jsonify({"error": "request must be json"}), 415
     request_json = await request.get_json()
@@ -218,6 +233,10 @@ async def format_as_ndjson(r: AsyncGenerator[dict, None]) -> AsyncGenerator[str,
 @bp.route("/chat", methods=["POST"])
 @authenticated
 async def chat(auth_claims: dict[str, Any]):
+    oid = auth_claims.get("oid")
+    span = trace.get_current_span()
+    if span and oid:
+        span.set_attribute("enduser.id", oid)
     if not request.is_json:
         return jsonify({"error": "request must be json"}), 415
     request_json = await request.get_json()
@@ -252,6 +271,10 @@ async def chat(auth_claims: dict[str, Any]):
 @bp.route("/chat/stream", methods=["POST"])
 @authenticated
 async def chat_stream(auth_claims: dict[str, Any]):
+    oid = auth_claims.get("oid")
+    span = trace.get_current_span()
+    if span and oid:
+        span.set_attribute("enduser.id", oid)
     if not request.is_json:
         return jsonify({"error": "request must be json"}), 415
     request_json = await request.get_json()
@@ -295,6 +318,19 @@ def auth_setup():
 
 @bp.route("/config", methods=["GET"])
 def config():
+    available_chat_models_by_model = current_app.config.get("AVAILABLE_CHAT_MODELS_BY_MODEL", {})
+    # Convert the dict to a simple array for the UI
+    available_models = [
+        {
+            "key": model_name,                      # UI can use this as the selection key
+            "model": model_name,
+            "deployment": entry["deployment"],
+            "reasoning": entry["reasoning"],
+            "streaming": entry["streaming"],
+        }
+        for model_name, entry in available_chat_models_by_model.items()
+    ]
+
     return jsonify(
         {
             "showGPT4VOptions": current_app.config[CONFIG_GPT4V_DEPLOYED],
@@ -312,6 +348,9 @@ def config():
             "showChatHistoryBrowser": current_app.config[CONFIG_CHAT_HISTORY_BROWSER_ENABLED],
             "showChatHistoryCosmos": current_app.config[CONFIG_CHAT_HISTORY_COSMOS_ENABLED],
             "showAgenticRetrievalOption": current_app.config[CONFIG_AGENTIC_RETRIEVAL_ENABLED],
+
+            "showModelSelector": len(available_models) > 1,
+            "availableChatModels": available_models,
         }
     )
 
@@ -359,10 +398,44 @@ async def speech():
         current_app.logger.exception("Exception in /speech")
         return jsonify({"error": str(e)}), 500
 
+   
+async def _safe(coro):
+    try:
+        await coro
+    except Exception:
+        current_app.logger.exception("Feedback email failed")
+
+@bp.post("/api/feedback")
+async def feedback_route():
+    data = await request.get_json() or {}
+    name = (data.get("name") or "").strip() or "Anonym"
+    email_addr = (data.get("email") or "").strip()
+    category = (data.get("category") or "annet").strip()
+    message = (data.get("message") or "").strip()
+    if not message:
+        return jsonify({"error": "message required"}), 400
+    if email_addr and not re.match(r".+@.+\..+", email_addr):
+        return jsonify({"error": "invalid email"}), 400
+    asyncio.create_task(_safe(send_feedback_email(name, email_addr, message, category)))
+    return jsonify({"ok": True, "status": "queued"}), 202
+
+@bp.post("/api/feedback_vote_up")
+@authenticated
+async def feedback_vote_up(auth_claims: dict[str, Any]):
+    return "", 204
+
+@bp.post("/api/feedback_vote_down")
+@authenticated
+async def feedback_vote_down(auth_claims: dict[str, Any]):
+    return "", 204
 
 @bp.post("/upload")
 @authenticated
 async def upload(auth_claims: dict[str, Any]):
+    oid = auth_claims.get("oid")
+    span = trace.get_current_span()
+    if span and oid:
+        span.set_attribute("enduser.id", oid)
     request_files = await request.files
     if "file" not in request_files:
         # If no files were included in the request, return an error response
@@ -392,6 +465,10 @@ async def upload(auth_claims: dict[str, Any]):
 @bp.post("/delete_uploaded")
 @authenticated
 async def delete_uploaded(auth_claims: dict[str, Any]):
+    oid = auth_claims.get("oid")
+    span = trace.get_current_span()
+    if span and oid:
+        span.set_attribute("enduser.id", oid)
     request_json = await request.get_json()
     filename = request_json.get("filename")
     user_oid = auth_claims["oid"]
@@ -407,6 +484,10 @@ async def delete_uploaded(auth_claims: dict[str, Any]):
 @bp.get("/list_uploaded")
 @authenticated
 async def list_uploaded(auth_claims: dict[str, Any]):
+    oid = auth_claims.get("oid")
+    span = trace.get_current_span()
+    if span and oid:
+        span.set_attribute("enduser.id", oid)
     user_oid = auth_claims["oid"]
     user_blob_container_client: FileSystemClient = current_app.config[CONFIG_USER_BLOB_CONTAINER_CLIENT]
     files = []
@@ -418,6 +499,26 @@ async def list_uploaded(auth_claims: dict[str, Any]):
         if error.status_code != 404:
             current_app.logger.exception("Error listing uploaded files", error)
     return jsonify(files), 200
+
+
+@bp.post("/api/generate_file")
+async def export_word():
+    data = await request.get_json(silent=True) or {}
+    try:
+        buf, filename, mimetype = build_from_request_json(data)
+    except Exception as e:
+        current_app.logger.exception("Klarte ikke å generere fil")
+        return jsonify({"error": str(e)}), 500
+
+    resp = await send_file(
+        buf,
+        mimetype=mimetype,
+        as_attachment=True,
+        attachment_filename=filename,
+    )
+
+    resp.headers["Content-Disposition"] = f"attachment; filename*=UTF-8''{filename}"
+    return resp
 
 
 @bp.before_app_serving
@@ -439,6 +540,11 @@ async def setup_clients():
     OPENAI_EMB_MODEL = os.getenv("AZURE_OPENAI_EMB_MODEL_NAME", "text-embedding-ada-002")
     OPENAI_EMB_DIMENSIONS = int(os.getenv("AZURE_OPENAI_EMB_DIMENSIONS") or 1536)
     OPENAI_REASONING_EFFORT = os.getenv("AZURE_OPENAI_REASONING_EFFORT")
+
+    OPENAI_CHATGPT_MODEL_2 = os.getenv("AZURE_OPENAI_CHATGPT_MODEL_2")
+    AZURE_OPENAI_CHATGPT_DEPLOYMENT_2 = os.getenv("AZURE_OPENAI_CHATGPT_DEPLOYMENT_2")
+    AZURE_OPENAI_CHATGPT_DEPLOYMENT_VERSION_2 = os.getenv("AZURE_OPENAI_CHATGPT_DEPLOYMENT_VERSION_2")
+
     # Used with Azure OpenAI deployments
     AZURE_OPENAI_SERVICE = os.getenv("AZURE_OPENAI_SERVICE")
     AZURE_OPENAI_GPT4V_DEPLOYMENT = os.environ.get("AZURE_OPENAI_GPT4V_DEPLOYMENT")
@@ -446,6 +552,32 @@ async def setup_clients():
     AZURE_OPENAI_CHATGPT_DEPLOYMENT = (
         os.getenv("AZURE_OPENAI_CHATGPT_DEPLOYMENT") if OPENAI_HOST.startswith("azure") else None
     )
+
+    # --- Build a registry of available chat models -> deployment ---
+    available_chat_models_by_model: dict[str, dict[str, Any]] = {}
+
+    def _mk_entry(model_name: str, deployment: str) -> dict[str, Any]:
+            is_reasoning = model_name in Approach.GPT_REASONING_MODELS
+            streaming_ok = (True if not is_reasoning else Approach.GPT_REASONING_MODELS[model_name].streaming)
+            return {
+                "model": model_name,
+                "deployment": deployment,
+                "reasoning": is_reasoning,
+                "streaming": streaming_ok,
+            }
+
+    if OPENAI_CHATGPT_MODEL and AZURE_OPENAI_CHATGPT_DEPLOYMENT:
+            available_chat_models_by_model[OPENAI_CHATGPT_MODEL] = _mk_entry(
+                OPENAI_CHATGPT_MODEL, AZURE_OPENAI_CHATGPT_DEPLOYMENT
+            )
+
+    if OPENAI_CHATGPT_MODEL_2 and AZURE_OPENAI_CHATGPT_DEPLOYMENT_2:
+            available_chat_models_by_model[OPENAI_CHATGPT_MODEL_2] = _mk_entry(
+                OPENAI_CHATGPT_MODEL_2, AZURE_OPENAI_CHATGPT_DEPLOYMENT_2
+            )
+
+    current_app.config["AVAILABLE_CHAT_MODELS_BY_MODEL"] = available_chat_models_by_model
+
     AZURE_OPENAI_EMB_DEPLOYMENT = os.getenv("AZURE_OPENAI_EMB_DEPLOYMENT") if OPENAI_HOST.startswith("azure") else None
     AZURE_OPENAI_CUSTOM_URL = os.getenv("AZURE_OPENAI_CUSTOM_URL")
     # https://learn.microsoft.com/azure/ai-services/openai/api-version-deprecation#latest-ga-api-release
@@ -667,12 +799,11 @@ async def setup_clients():
         AZURE_SEARCH_QUERY_REWRITING == "true" and AZURE_SEARCH_SEMANTIC_RANKER != "disabled"
     )
     current_app.config[CONFIG_DEFAULT_REASONING_EFFORT] = OPENAI_REASONING_EFFORT
-    current_app.config[CONFIG_REASONING_EFFORT_ENABLED] = OPENAI_CHATGPT_MODEL in Approach.GPT_REASONING_MODELS
-    current_app.config[CONFIG_STREAMING_ENABLED] = (
-        bool(USE_GPT4V)
-        or OPENAI_CHATGPT_MODEL not in Approach.GPT_REASONING_MODELS
-        or Approach.GPT_REASONING_MODELS[OPENAI_CHATGPT_MODEL].streaming
-    )
+    any_reasoning = any(entry["reasoning"] for entry in available_chat_models_by_model.values())
+    current_app.config[CONFIG_REASONING_EFFORT_ENABLED] = any_reasoning
+
+    any_streaming_chat = any(entry["streaming"] for entry in available_chat_models_by_model.values())
+    current_app.config[CONFIG_STREAMING_ENABLED] = bool(USE_GPT4V) or any_streaming_chat
     current_app.config[CONFIG_VECTOR_SEARCH_ENABLED] = os.getenv("USE_VECTORS", "").lower() != "false"
     current_app.config[CONFIG_USER_UPLOAD_ENABLED] = bool(USE_USER_UPLOAD)
     current_app.config[CONFIG_LANGUAGE_PICKER_ENABLED] = ENABLE_LANGUAGE_PICKER
@@ -809,7 +940,13 @@ def create_app():
 
     if os.getenv("APPLICATIONINSIGHTS_CONNECTION_STRING"):
         app.logger.info("APPLICATIONINSIGHTS_CONNECTION_STRING is set, enabling Azure Monitor")
-        configure_azure_monitor()
+        configure_azure_monitor(
+            instrumentation_options={
+                "django": {"enabled": False},
+                "psycopg2": {"enabled": False},
+                "fastapi": {"enabled": False},
+            }
+        )
         # This tracks HTTP requests made by aiohttp:
         AioHttpClientInstrumentor().instrument()
         # This tracks HTTP requests made by httpx:

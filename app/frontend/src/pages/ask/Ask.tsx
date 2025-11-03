@@ -1,7 +1,8 @@
 import { useContext, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Helmet } from "react-helmet-async";
-import { Panel, DefaultButton, Spinner } from "@fluentui/react";
+import { useMemo } from "react";
+import { Panel, DefaultButton, Spinner, IDropdownOption } from "@fluentui/react";
 
 import styles from "./Ask.module.css";
 
@@ -58,6 +59,19 @@ export function Component(): JSX.Element {
     const [isPlaying, setIsPlaying] = useState(false);
     const [showAgenticRetrievalOption, setShowAgenticRetrievalOption] = useState<boolean>(false);
     const [useAgenticRetrieval, setUseAgenticRetrieval] = useState<boolean>(false);
+
+    const [chatModelKey, setChatModelKey] = useState<"1" | "2">("1");
+
+    const { t, i18n } = useTranslation();
+    
+    // the two choices shown in Settings
+    const chatModelOptions: IDropdownOption[] = useMemo(
+    () => [
+        { key: "1", text: t("labels.chatModelOptions.1") },
+        { key: "2", text: t("labels.chatModelOptions.2") }
+    ],
+    [i18n.language]
+    );
 
     const lastQuestionRef = useRef<string>("");
 
@@ -156,6 +170,7 @@ export function Component(): JSX.Element {
                         gpt4v_input: gpt4vInput,
                         language: i18n.language,
                         use_agentic_retrieval: useAgenticRetrieval,
+                        chat_model_key: chatModelKey,
                         ...(seed !== null ? { seed: seed } : {})
                     }
                 },
@@ -228,6 +243,9 @@ export function Component(): JSX.Element {
             case "useGroupsSecurityFilter":
                 setUseGroupsSecurityFilter(value);
                 break;
+            case "chatModelKey":
+                setChatModelKey(value);
+                break;
             case "useGPT4V":
                 setUseGPT4V(value);
                 break;
@@ -274,8 +292,6 @@ export function Component(): JSX.Element {
     const onUseGroupsSecurityFilterChange = (_ev?: React.FormEvent<HTMLElement | HTMLInputElement>, checked?: boolean) => {
         setUseGroupsSecurityFilter(!!checked);
     };
-
-    const { t, i18n } = useTranslation();
 
     return (
         <div className={styles.askContainer}>
@@ -381,6 +397,8 @@ export function Component(): JSX.Element {
                     requireAccessControl={requireAccessControl}
                     showAgenticRetrievalOption={showAgenticRetrievalOption}
                     useAgenticRetrieval={useAgenticRetrieval}
+                    chatModelKey={chatModelKey}
+                    chatModelOptions={chatModelOptions}
                     onChange={handleSettingsChange}
                 />
                 {useLogin && <TokenClaimsDisplay />}

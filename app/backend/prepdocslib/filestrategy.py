@@ -1,5 +1,9 @@
+import os
 import logging
-from typing import Optional
+import json
+from typing import List, Optional
+
+from datetime import datetime, timezone
 
 from azure.core.credentials import AzureKeyCredential
 
@@ -17,7 +21,8 @@ logger = logging.getLogger("scripts")
 async def parse_file(
     file: File,
     file_processors: dict[str, FileProcessor],
-    category: Optional[str] = None,
+    category: Optional[List[str]],
+    docdate: Optional[str] = None,
     image_embeddings: Optional[ImageEmbeddings] = None,
 ) -> list[Section]:
     key = file.file_extension().lower()
@@ -31,7 +36,7 @@ async def parse_file(
     if image_embeddings:
         logger.warning("Each page will be split into smaller chunks of text, but images will be of the entire page.")
     sections = [
-        Section(split_page, content=file, category=category) for split_page in processor.splitter.split_pages(pages)
+        Section(split_page, content=file, category=category, docdate=docdate,) for split_page in processor.splitter.split_pages(pages)
     ]
     return sections
 
@@ -40,6 +45,10 @@ class FileStrategy(Strategy):
     """
     Strategy for ingesting documents into a search service from files stored either locally or in a data lake storage account
     """
+
+    # Set your manual_docdate here. Use None to default to system's current date.
+    #manual_docdate: Optional[str] = "2024-07-01T12:00:00Z"  # Change as needed
+    manual_docdate: Optional[str] = None
 
     def __init__(
         self,
@@ -53,7 +62,8 @@ class FileStrategy(Strategy):
         search_analyzer_name: Optional[str] = None,
         search_field_name_embedding: Optional[str] = None,
         use_acls: bool = False,
-        category: Optional[str] = None,
+        category: Optional[List[str]] = None,
+        docdate: Optional[str] = None,
         use_content_understanding: bool = False,
         content_understanding_endpoint: Optional[str] = None,
     ):
@@ -70,6 +80,7 @@ class FileStrategy(Strategy):
         self.category = category
         self.use_content_understanding = use_content_understanding
         self.content_understanding_endpoint = content_understanding_endpoint
+        self.docdate = docdate
 
     def setup_search_manager(self):
         self.search_manager = SearchManager(
@@ -98,11 +109,32 @@ class FileStrategy(Strategy):
 
     async def run(self):
         self.setup_search_manager()
+
+        # Load the category JSON from a local file
+        try:
+            with open("app/backend/prepdocslib/category.json", "r") as f:
+                category_data = json.load(f)
+            category_keywords = category_data.get("category", [])
+        except Exception as e:
+            logger.error("Error loading category JSON file: " + str(e))
+            category_keywords = []
+                                
         if self.document_action == DocumentAction.Add:
             files = self.list_file_strategy.list()
             async for file in files:
                 try:
-                    sections = await parse_file(file, self.file_processors, self.category, self.image_embeddings)
+                    # Match keywords based on the filename
+                    filename_lower = os.path.basename(file.filename()).lower()
+                    matched_categories = set()
+                    for keyword in category_keywords:
+                        if keyword.lower() in filename_lower:
+                            matched_categories.add(keyword.lower())
+                    file_category = list(matched_categories)
+
+                    # Use the manual_docdate if set; otherwise, compute the current docdate
+                    file_docdate = self.manual_docdate if self.manual_docdate else datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+                                    
+                    sections = await parse_file(file, self.file_processors, file_category, file_docdate, self.image_embeddings)
                     if sections:
                         blob_sas_uris = await self.blob_manager.upload_blob(file)
                         blob_image_embeddings: Optional[list[list[float]]] = None
@@ -134,6 +166,8 @@ class UploadUserFileStrategy:
         embeddings: Optional[OpenAIEmbeddings] = None,
         image_embeddings: Optional[ImageEmbeddings] = None,
         search_field_name_embedding: Optional[str] = None,
+        category: Optional[List[str]] = None,
+        docdate: Optional[str] = None,
     ):
         self.file_processors = file_processors
         self.embeddings = embeddings
@@ -149,11 +183,19 @@ class UploadUserFileStrategy:
             search_images=False,
         )
         self.search_field_name_embedding = search_field_name_embedding
+        self.category = category
+        self.docdate = docdate
 
     async def add_file(self, file: File):
         if self.image_embeddings:
             logging.warning("Image embeddings are not currently supported for the user upload feature")
-        sections = await parse_file(file, self.file_processors)
+        # Compute the docdate once for this upload (current UTC time, ISO 8601 format)
+        self.docdate = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+        self.category = ["privat"]
+
+        # Pass the computed docdate to parse_file so that each Section gets it
+        sections = await parse_file(file, self.file_processors, self.category, self.docdate)
         if sections:
             await self.search_manager.update_content(sections, url=file.url)
 

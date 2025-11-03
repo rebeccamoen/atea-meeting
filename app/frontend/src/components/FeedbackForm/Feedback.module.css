@@ -1,0 +1,117 @@
+/* Theme tokens (scoped to this dialog’s content) */
+.feedbackDialogContent {
+  --primary: #07376d;
+  --primary-hover: #062c57;
+  --white: #ffffff;
+  --gray: #cccccc;
+  --radius: 5px;
+}
+
+/* Dialog container (applied via modalProps.containerClassName) */
+.feedbackDialogContainer {
+  padding: 0;
+  background-color: #ffffff;
+  border-radius: 8px;
+  box-shadow:
+    0 8px 16px rgba(0, 0, 0, 0.14),
+    0 0 2px rgba(0, 0, 0, 0.12);
+  width: 60%;
+  max-width: 800px;
+  max-height: 90vh;
+  overflow-y: auto;
+}
+
+/* Dialog content */
+.feedbackDialogContent {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  width: 100%;
+  text-align: left;
+  padding: 1rem;
+  gap: 12px;
+  background: transparent; 
+}
+
+.feedbackDialogContent h1 {
+  font-size: 1.5rem;
+  font-weight: 700;
+  margin-bottom: 0.5rem;
+  color: var(--primary);
+}
+
+.formGrid {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.sectionDivider {
+  border: none;
+  border-top: 1px solid #e5e5e5;
+  margin: 12px 0;
+}
+
+/* ============================= */
+/* Fluent UI overrides via :global */
+/* TextField: rounded + primary border */
+.input :global(.ms-TextField-fieldGroup) {
+  border-radius: var(--radius);
+  border: 2px solid var(--primary);
+}
+.input :global(.ms-TextField-field) {
+  border-radius: var(--radius);
+}
+
+/* Dropdown: rounded + primary border */
+.dropdown :global(.ms-Dropdown-title) {
+  border-radius: var(--radius);
+  border: 2px solid var(--primary);
+}
+/* Dropdown callout is rendered in a portal; make it global */
+:global(.ms-Callout) {
+  border-radius: var(--radius);
+}
+
+/* Primary "Send" button */
+.sendButton {
+  background-color: var(--primary);
+  border-color: var(--primary);
+  border-width: 2px;
+  border-style: solid;
+  border-radius: var(--radius);
+  color: var(--white);
+}
+.sendButton:hover,
+.sendButton:active {
+  background-color: var(--primary-hover);
+  border-color: var(--primary-hover);
+  color: var(--white);
+}
+
+/* Default "Lukk" button */
+.closeButton {
+  background-color: var(--white);
+  border-color: var(--gray);
+  border-width: 2px;
+  border-style: solid;
+  border-radius: var(--radius);
+  color: var(--primary);
+}
+.closeButton:hover,
+.closeButton:active {
+  background-color: var(--gray);
+  border-color: var(--gray);
+  color: var(--primary);
+}
+
+/* ============================= */
+/* Responsive */
+@media (max-width: 991px) {
+  .feedbackDialogContainer {
+    width: 90%;
+    height: auto;
+    max-height: 90vh;
+    padding: 1rem;
+  }
+}

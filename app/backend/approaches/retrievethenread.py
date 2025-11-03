@@ -1,3 +1,4 @@
+import os
 from typing import Any, Optional, cast
 
 from azure.search.documents.agent.aio import KnowledgeAgentRetrievalClient
@@ -72,6 +73,21 @@ class RetrieveThenReadApproach(Approach):
     ) -> dict[str, Any]:
         overrides = context.get("overrides", {})
         auth_claims = context.get("auth_claims", {})
+
+        # --- NEW: select model/deployment from overrides ---
+        chat_model_key = str(overrides.get("chat_model_key", "1"))
+        selected_model = (
+            os.environ.get("AZURE_OPENAI_CHATGPT_MODEL_2", self.chatgpt_model)
+            if chat_model_key == "2"
+            else os.environ.get("AZURE_OPENAI_CHATGPT_MODEL", self.chatgpt_model)
+        )
+        selected_deployment = (
+            os.environ.get("AZURE_OPENAI_CHATGPT_DEPLOYMENT_2", self.chatgpt_deployment)
+            if chat_model_key == "2"
+            else os.environ.get("AZURE_OPENAI_CHATGPT_DEPLOYMENT", self.chatgpt_deployment)
+        )
+        # ---------------------------------------------------
+
         use_agentic_retrieval = True if overrides.get("use_agentic_retrieval") else False
         q = messages[-1]["content"]
         if not isinstance(q, str):
@@ -92,8 +108,8 @@ class RetrieveThenReadApproach(Approach):
         chat_completion = cast(
             ChatCompletion,
             await self.create_chat_completion(
-                self.chatgpt_deployment,
-                self.chatgpt_model,
+                selected_deployment,                # ← use selected deployment
+                selected_model,                     # ← use selected model
                 messages=messages,
                 overrides=overrides,
                 response_token_limit=self.get_response_token_limit(self.chatgpt_model, 1024),
@@ -104,8 +120,8 @@ class RetrieveThenReadApproach(Approach):
                 title="Prompt to generate answer",
                 messages=messages,
                 overrides=overrides,
-                model=self.chatgpt_model,
-                deployment=self.chatgpt_deployment,
+                model=selected_model,               # ← selected model
+                deployment=selected_deployment,     # ← selected deployment
                 usage=chat_completion.usage,
             )
         )
