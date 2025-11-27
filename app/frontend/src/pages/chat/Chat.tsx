@@ -421,11 +421,7 @@ const Chat = () => {
                         <div className={styles.chatEmptyState}>
                             <img src={atealogo} alt="Atea" aria-label="Atea" height="75px" />
 
-                            <h1 className={styles.chatEmptyStateTitle}>{t("chatEmptyStateTitle")}</h1>
-                            <h2 className={styles.chatEmptyStateSubtitle}>{t("chatEmptyStateSubtitle")}</h2>
                             {showLanguagePicker && <LanguagePicker onLanguageChange={newLang => i18n.changeLanguage(newLang)} />}
-
-                            <ExampleList onExampleClicked={onExampleClicked} useGPT4V={useGPT4V} />
                         </div>
                     ) : (
                         <div className={styles.chatMessageStream}>
@@ -503,6 +499,11 @@ const Chat = () => {
                             onSend={question => makeApiRequest(question)}
                             showSpeechInput={showSpeechInput}
                         />
+                        {!lastQuestionRef.current && (
+                            <>
+                                <ExampleList onExampleClicked={onExampleClicked} useGPT4V={useGPT4V} />
+                            </>
+                        )}
                     </div>
                 </div>
 

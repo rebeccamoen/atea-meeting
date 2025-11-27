@@ -82,22 +82,6 @@
     display: none;
 }
 
-.menuToggle {
-    display: block;
-    background: none;
-    border: none;
-    color: #008A00;
-    font-size: 1.5rem;
-    cursor: pointer;
-    z-index: 101;
-}
-
-.loginMenuContainer {
-    display: flex;
-    align-items: center;
-    gap: 0; /* Ensure no gap between login button and menu toggle */
-}
-
 @media (min-width: 992px) {
     .headerTitle {
         font-weight: 600;
@@ -136,9 +120,5 @@
         font-weight: normal;
         display: inline-block;
         vertical-align: middle;
-    }
-
-    .menuToggle {
-        display: none;
     }
 }
